@@ -32,6 +32,8 @@ export interface AnnotationVariables {
 	blockId: string;
 	/** Ours: deep link back into the original application at this highlight. */
 	link: string;
+	/** Ours: true when this highlight could not be re-anchored to its source. */
+	orphaned: boolean;
 }
 
 export interface TemplateVariables {
@@ -55,6 +57,7 @@ export interface TemplateVariables {
 		deepLink: string;
 		state: string;
 		highlightCount: number;
+		orphanCount: number;
 		importedAt: string;
 	};
 }
@@ -117,6 +120,7 @@ export function buildVariables(
 				attachment: { itemKey: source.id },
 				blockId: blockId(h.id),
 				link: h.anchors.cfi && source.deepLink ? `${source.deepLink}#${h.anchors.cfi}` : (source.deepLink ?? ""),
+				orphaned: h.state === "orphaned",
 			};
 		}),
 		reader: {
@@ -126,6 +130,7 @@ export function buildVariables(
 			deepLink: source.deepLink ?? "",
 			state: source.state,
 			highlightCount: highlights.length,
+			orphanCount: highlights.filter((h) => h.state === "orphaned").length,
 			importedAt,
 		},
 	};

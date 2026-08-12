@@ -47,8 +47,7 @@ function existingCitekeys(app: App, sourcesFolder: string): Map<string, string> 
 		if (prefix !== "" && !file.path.startsWith(`${prefix}/`)) continue;
 
 		const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-		const reader = frontmatter?.reader;
-		const sourceId = typeof reader === "object" && reader !== null ? reader.sourceId : undefined;
+		const sourceId = frontmatter?.readerSourceId;
 		const citekey = frontmatter?.citekey;
 
 		if (typeof sourceId === "string" && sourceId !== "" && typeof citekey === "string" && citekey !== "") {
@@ -116,13 +115,12 @@ export async function importFromAppleBooks(
 export async function toggleReaderFrontmatter(app: App, file: TFile): Promise<boolean> {
 	let next = false;
 	await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-		const current = frontmatter.reader;
-		if (typeof current === "object" && current !== null) {
-			// An imported note already has a reader block; leave its data alone.
+		if (typeof frontmatter.readerState === "string") {
+			// An imported note is already a reader note; leave its metadata alone.
 			next = true;
 			return;
 		}
-		next = current !== true;
+		next = frontmatter.reader !== true;
 		if (next) frontmatter.reader = true;
 		else delete frontmatter.reader;
 	});

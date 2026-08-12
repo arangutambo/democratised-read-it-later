@@ -3,6 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin } from "obsidian";
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
 import { readerSkin } from "./render/reader-skin";
+import { collectQueue, ensureQueueBase } from "./review/queue";
 import { migrateSettings } from "./settings/migrate";
 import { ReaderSettingTab } from "./settings/tab";
 import { DEFAULT_SETTINGS, type ReaderSettings } from "./settings/types";
@@ -54,6 +55,12 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "open-review-queue",
+			name: "Open review queue",
+			callback: () => void this.openReviewQueue(),
+		});
+
+		this.addCommand({
 			id: "import-apple-books",
 			name: "Import highlights from Apple Books",
 			checkCallback: (checking) => {
@@ -82,6 +89,39 @@ export default class ReaderPlugin extends Plugin {
 			const match = this.settings.highlightColours.find((c) => c.sourceKeys.includes(raw));
 			return match ? { name: match.name, css: match.css } : { name: "", css: "" };
 		};
+	}
+
+	/**
+	 * Everything awaiting a human: thin imports, orphaned highlights, edit conflicts.
+	 *
+	 * The queue is an Obsidian Base, so it keeps working with Reader disabled and needs no
+	 * custom pane. An existing queue file is never overwritten — the user will have
+	 * customised its views.
+	 */
+	private async openReviewQueue(): Promise<void> {
+		try {
+			const summary = collectQueue(this.app, this.settings.sourcesFolder);
+			const { path, created } = await ensureQueueBase(this.app, this.settings.sourcesFolder);
+
+			const file = this.app.vault.getFileByPath(path);
+			if (file) await this.app.workspace.getLeaf(false).openFile(file);
+
+			const parts: string[] = [];
+			if (summary.needsReview > 0) parts.push(`${summary.needsReview} needing review`);
+			if (summary.orphans > 0) parts.push(`${summary.orphans} orphaned highlight(s)`);
+			if (summary.conflicts > 0) parts.push(`${summary.conflicts} conflict(s)`);
+
+			new Notice(
+				parts.length === 0
+					? created
+						? "Reader: queue created. Nothing needs attention."
+						: "Reader: nothing needs attention."
+					: `Reader: ${parts.join(", ")}.`,
+			);
+		} catch (error) {
+			this.log.error("could not open the review queue", error);
+			new Notice("Reader: could not open the review queue — check the console.");
+		}
 	}
 
 	private async toggleReader(file: import("obsidian").TFile): Promise<void> {

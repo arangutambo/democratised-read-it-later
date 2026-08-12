@@ -66,7 +66,8 @@ export function render(template: string, variables: TemplateVariables, templateN
 export const DEFAULT_HIGHLIGHTS_TEMPLATE = `{% for annotation in annotations %}{% if annotation.chapter and annotation.chapter != annotations[loop.index0 - 1].chapter or loop.first and annotation.chapter %}
 ### {{ annotation.chapter }}
 {% endif %}
-{{ annotation.annotatedText | blockquote }}
+{% if annotation.orphaned %}> [!missing] Orphaned — this highlight no longer matches its source
+{% endif %}{{ annotation.annotatedText | blockquote }}
 {% if annotation.comment %}
 {{ annotation.comment }}
 {% endif %}{% if annotation.colorCategory %}
@@ -75,20 +76,28 @@ export const DEFAULT_HIGHLIGHTS_TEMPLATE = `{% for annotation in annotations %}{
 ^{{ annotation.blockId }}
 {% endfor %}`;
 
-/** Frontmatter and prose scaffold, written once when the note is first created. */
+/**
+ * Frontmatter and prose scaffold, written once when the note is first created.
+ *
+ * Reader's own fields are flat top-level properties rather than a nested `reader:` block.
+ * The read-it-later queue is an Obsidian Base, and Bases filters are expressions over
+ * top-level properties (`readerState == "needs-review"`); flat keys are also what Obsidian's
+ * own Properties UI, search and Dataview all address directly. The nesting was tidier to
+ * look at and worse at the one job the frontmatter has.
+ */
 export const DEFAULT_NOTE_TEMPLATE = `---
 citekey: {{ citekey }}
 title: "{{ title | oneline }}"
 {% if authors %}authors: "{{ authors }}"
 {% endif %}{% if year %}year: {{ year }}
-{% endif %}reader:
-  sourceId: "{{ reader.sourceId }}"
-  sourceType: {{ reader.sourceType }}
-  state: {{ reader.state }}
-  highlightCount: {{ reader.highlightCount }}
-  importedAt: {{ reader.importedAt }}
-{% if reader.libraryPath %}  libraryPath: "{{ reader.libraryPath }}"
-{% endif %}{% if reader.deepLink %}  deepLink: "{{ reader.deepLink }}"
+{% endif %}readerState: {{ reader.state }}
+readerType: {{ reader.sourceType }}
+readerSourceId: "{{ reader.sourceId }}"
+readerHighlights: {{ reader.highlightCount }}
+readerOrphans: {{ reader.orphanCount }}
+readerImported: {{ reader.importedAt }}
+{% if reader.libraryPath %}readerLibraryPath: "{{ reader.libraryPath }}"
+{% endif %}{% if reader.deepLink %}readerDeepLink: "{{ reader.deepLink }}"
 {% endif %}csl:
   type: {{ itemType }}
   title: "{{ title | oneline }}"

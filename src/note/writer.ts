@@ -55,12 +55,11 @@ async function ensureFolder(vault: Vault, folder: string): Promise<void> {
 	}
 }
 
-/** The `reader.sourceId` recorded in a note's frontmatter, if it has one. */
+/** The `readerSourceId` recorded in a note's frontmatter, if it has one. */
 function sourceIdOf(app: App, path: string): string | undefined {
 	const file = app.vault.getAbstractFileByPath(path);
 	if (!(file instanceof TFile)) return undefined;
-	const reader = app.metadataCache.getFileCache(file)?.frontmatter?.reader;
-	const id = typeof reader === "object" && reader !== null ? (reader as Record<string, unknown>).sourceId : undefined;
+	const id = app.metadataCache.getFileCache(file)?.frontmatter?.readerSourceId;
 	return typeof id === "string" && id !== "" ? id : undefined;
 }
 

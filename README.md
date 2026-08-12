@@ -4,8 +4,13 @@ A read-it-later, reader-mode, highlighting and research-capture system for Obsid
 Safari extension to follow. Reading, annotating and citing are meant to be the same act, over
 plain files you own.
 
-**Status: M2.** Apple Books highlights import into notes carrying a citekey, CSL frontmatter
-and a managed highlights region, and the reader skin renders them. 143 tests, no browser.
+**Status: M3.** Apple Books highlights import into notes carrying a citekey, CSL frontmatter
+and a managed highlights region; the reader skin renders them; and the re-anchoring engine
+finds highlights again after their source has been edited. 179 tests, no browser.
+
+Measured against the real 1,177-highlight corpus, re-anchoring **mis-anchors 0% of highlights
+in every scenario** — it will orphan a highlight into the review queue rather than silently
+attach it to text you never highlighted. See `PLAN.md` §0.7 for the full table.
 
 ### Apple Books requires Full Disk Access
 
@@ -26,8 +31,9 @@ rather than hanging Obsidian.
 ```bash
 npm install
 npm run dev            # watch build, straight into the vault, Hot Reload picks it up
-npm test               # 143 tests, no browser required
+npm test               # 179 tests, no browser required
 npm run books:dry-run  # run the Books pipeline on real data, writing nothing
+npm run anchor:bench   # measure re-anchoring accuracy against the real corpus
 npm run build          # typecheck + production build into the repo
 npm run install-local  # production build, copied into the vault
 ```

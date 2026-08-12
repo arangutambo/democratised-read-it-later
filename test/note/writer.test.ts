@@ -96,7 +96,7 @@ describe("writeImport", () => {
 
 		const text = vault.files.get(written.path)!;
 		expect(text).toContain("citekey: housel2020psychology");
-		expect(text).toContain('sourceId: "ASSET1"');
+		expect(text).toContain('readerSourceId: "ASSET1"');
 		expect(findRegion(text, "highlights")?.content).toContain("Doing well with money");
 		expect(text).toContain("^hl-01arz3ndektsv4rrffq69g5fav");
 	});
@@ -109,7 +109,7 @@ describe("writeImport", () => {
 	it("marks a low-confidence import for review rather than trusting it", async () => {
 		const written = await writeImport(app, importResult({}, 0.3), options);
 		expect(written.needsReview).toBe(true);
-		expect(vault.files.get(written.path)).toContain("state: needs-review");
+		expect(vault.files.get(written.path)).toContain("readerState: needs-review");
 	});
 
 	it("re-importing unchanged highlights is a no-op", async () => {
@@ -155,7 +155,7 @@ describe("writeImport", () => {
 		// Two assets missing from the Books library are both titled "Untitled"; without this
 		// the second would merge into the first's note and fuse two books together.
 		const first = await writeImport(app, importResult({ id: "A", title: "Untitled", citekey: "untitled" }), options);
-		vault.frontmatter.set(first.path, { reader: { sourceId: "A" } });
+		vault.frontmatter.set(first.path, { readerSourceId: "A" });
 
 		const second = await writeImport(
 			app,
@@ -170,7 +170,7 @@ describe("writeImport", () => {
 
 	it("keeps writing to the same note when the same book is re-imported", async () => {
 		const first = await writeImport(app, importResult({ id: "A", title: "Untitled" }), options);
-		vault.frontmatter.set(first.path, { reader: { sourceId: "A" } });
+		vault.frontmatter.set(first.path, { readerSourceId: "A" });
 
 		const second = await writeImport(app, importResult({ id: "A", title: "Untitled" }), options);
 

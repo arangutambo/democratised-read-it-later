@@ -9,6 +9,20 @@
 export class App {
 	workspace = {
 		getActiveViewOfType: (): unknown => null,
+		getLeaf: (): { openFile: (file: unknown) => Promise<void> } => ({
+			openFile: async () => {},
+		}),
+	};
+
+	vault = {
+		getMarkdownFiles: (): unknown[] => [],
+		getFileByPath: (): unknown => null,
+		getAbstractFileByPath: (): unknown => null,
+		create: async (): Promise<void> => {},
+	};
+
+	metadataCache = {
+		getFileCache: (): unknown => null,
 	};
 }
 

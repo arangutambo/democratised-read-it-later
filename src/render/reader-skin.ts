@@ -18,13 +18,13 @@ const CONTAINER_SELECTOR = ".markdown-preview-view, .markdown-rendered";
 
 /**
  * A note is a reader note when its frontmatter carries `reader: true` (the manual toggle) or
- * a `reader:` block (written by an importer).
+ * a `readerState` property (written by an importer).
  */
 export function isReaderNote(frontmatter: unknown): boolean {
 	if (frontmatter === null || typeof frontmatter !== "object") return false;
-	const reader = (frontmatter as Record<string, unknown>).reader;
-	if (reader === true) return true;
-	return typeof reader === "object" && reader !== null;
+	const fields = frontmatter as Record<string, unknown>;
+	// `reader: true` is the manual toggle; `readerState` is written by an importer.
+	return fields.reader === true || typeof fields.readerState === "string";
 }
 
 /**
