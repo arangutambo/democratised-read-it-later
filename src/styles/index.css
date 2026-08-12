@@ -1,0 +1,13 @@
+/*
+ * Reader — stylesheet entry point.
+ *
+ * Built to styles.css by esbuild. Feature styles land in sibling files and are imported
+ * here; the reader skin will expose its measure, leading, font stack and highlight colours
+ * as Style Settings variables rather than hardcoding them.
+ */
+
+.reader-setting-note {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin: 0 0 0.75em;
+}

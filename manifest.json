@@ -1,0 +1,9 @@
+{
+	"id": "reader",
+	"name": "Reader",
+	"version": "0.1.0",
+	"minAppVersion": "1.9.0",
+	"description": "Read-it-later, reader mode, highlighting and research capture. Import annotations, read in a proper reader skin, and keep highlights anchored to their source.",
+	"author": "Antoine Haddad",
+	"isDesktopOnly": false
+}

@@ -1,0 +1,62 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+/**
+ * Enforces PLAN.md §3.1, the structural rule the whole test strategy rests on:
+ * the pure layers must never import from `obsidian`.
+ *
+ * Without it the anchoring engine — the riskiest code in the project — becomes untestable
+ * outside a running Obsidian instance. The rule is easy to break by accident months from
+ * now with a single convenience import, so it is asserted rather than remembered.
+ */
+
+const SRC = path.resolve(__dirname, "../src");
+
+/** Layers that must stay free of any Obsidian dependency. */
+const PURE_DIRS = ["core", "anchor", "template", "transport"];
+
+/** Within source adapters, only row-mapping is pure; `db.ts` may touch the vault APIs. */
+const PURE_ADAPTER_FILES = ["map.ts"];
+
+function walk(dir: string): string[] {
+	let out: string[] = [];
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return out;
+	}
+	for (const entry of entries) {
+		const full = path.join(dir, entry);
+		if (statSync(full).isDirectory()) out = out.concat(walk(full));
+		else if (full.endsWith(".ts")) out.push(full);
+	}
+	return out;
+}
+
+function pureFiles(): string[] {
+	const files = PURE_DIRS.flatMap((dir) => walk(path.join(SRC, dir)));
+	const adapters = walk(path.join(SRC, "sources")).filter((f) =>
+		PURE_ADAPTER_FILES.includes(path.basename(f)),
+	);
+	return [...files, ...adapters];
+}
+
+const IMPORTS_OBSIDIAN = /(?:from\s+["']obsidian["']|require\(\s*["']obsidian["']\s*\))/;
+
+describe("architecture", () => {
+	it("keeps the pure layers free of `obsidian` imports", () => {
+		const offenders = pureFiles()
+			.filter((file) => IMPORTS_OBSIDIAN.test(readFileSync(file, "utf8")))
+			.map((file) => path.relative(SRC, file));
+
+		expect(offenders).toEqual([]);
+	});
+
+	it("is actually scanning files, not passing vacuously", () => {
+		// A rename that empties PURE_DIRS would otherwise make the test above meaningless.
+		expect(pureFiles().length).toBeGreaterThan(0);
+	});
+});

@@ -1,0 +1,15 @@
+node_modules/
+
+# Build artifacts — produced by esbuild, not committed.
+main.js
+styles.css
+*.js.map
+
+# Local plugin data, never shared.
+data.json
+
+# The real Apple Books corpus used by the anchoring benchmark: private, copyrighted,
+# and never committed. See PLAN.md §5.
+test/private/
+
+.DS_Store
