@@ -9,7 +9,9 @@
 		"install-local": "node esbuild.config.mjs production && node scripts/install-local.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"typecheck": "tsc -noEmit -skipLibCheck"
+		"typecheck": "tsc -noEmit -skipLibCheck",
+		"books:dry-run": "node --experimental-strip-types tools/books-dry-run.ts 2>/dev/null || npm run books:dry-run:bundled",
+		"books:dry-run:bundled": "esbuild tools/books-dry-run.ts --bundle --platform=node --format=cjs --outfile=.dry-run.cjs --log-level=error && node .dry-run.cjs"
 	},
 	"keywords": [],
 	"license": "MIT",
@@ -20,5 +22,9 @@
 		"obsidian": "^1.5.7",
 		"typescript": "^5.4.5",
 		"vitest": "^3.2.7"
+	},
+	"dependencies": {
+		"@types/nunjucks": "^3.2.6",
+		"nunjucks": "^3.2.4"
 	}
 }

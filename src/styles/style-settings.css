@@ -1,0 +1,73 @@
+/*
+ * Style Settings configuration.
+ *
+ * Kept out of the bundle on purpose: esbuild strips CSS comments in every mode, and this
+ * block IS the configuration — Style Settings discovers a plugin by parsing it out of the
+ * built styles.css. esbuild.config.mjs appends this file verbatim after each CSS build.
+ */
+
+/* @settings
+name: Reader
+id: reader
+settings:
+  -
+    id: reader-typography
+    title: Reading typography
+    type: heading
+    level: 2
+    collapsed: false
+  -
+    id: reader-measure
+    title: Measure
+    description: Line length in characters. 60–75 is the comfortable range for long prose.
+    type: variable-number-slider
+    default: 66
+    min: 40
+    max: 100
+    step: 1
+    format: ch
+  -
+    id: reader-font-size
+    title: Font size
+    type: variable-number-slider
+    default: 18
+    min: 12
+    max: 28
+    step: 1
+    format: px
+  -
+    id: reader-line-height
+    title: Line height
+    type: variable-number-slider
+    default: 1.6
+    min: 1.2
+    max: 2.2
+    step: 0.05
+  -
+    id: reader-font
+    title: Body font
+    description: Any font installed on this device. Leave blank to use the theme's text font.
+    type: variable-text
+    default: ''
+  -
+    id: reader-highlights
+    title: Highlights
+    type: heading
+    level: 2
+    collapsed: false
+  -
+    id: reader-highlight-accent
+    title: Highlight accent
+    description: The bar down the side of each highlight.
+    type: variable-themed-color
+    format: hex
+    default-light: '#d9a441'
+    default-dark: '#e0b060'
+  -
+    id: reader-highlight-background
+    title: Highlight background
+    type: variable-themed-color
+    format: hex
+    default-light: '#faf6ec'
+    default-dark: '#26221a'
+*/

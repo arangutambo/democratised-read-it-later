@@ -2,7 +2,7 @@ import esbuild from "esbuild";
 import process from "process";
 import path from "path";
 import { existsSync } from "fs";
-import { copyFile, mkdir, writeFile } from "fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "fs/promises";
 import builtins from "builtin-modules";
 
 const prod = process.argv[2] === "production";
@@ -48,9 +48,33 @@ const copyManifest = {
 	},
 };
 
+/**
+ * Style Settings discovers a plugin by parsing a `/* @settings *\/` comment out of the built
+ * styles.css — but esbuild strips CSS comments in every mode, minified or not. So the block
+ * lives outside the bundle and is appended verbatim after each CSS build. Without this the
+ * plugin still styles correctly and simply never appears in Style Settings, which is exactly
+ * the kind of failure nobody notices.
+ */
+const appendStyleSettings = {
+	name: "append-style-settings",
+	setup(build) {
+		build.onEnd(async (result) => {
+			if (result.errors.length > 0) return;
+			const target = build.initialOptions.outfile;
+			const [css, settings] = await Promise.all([
+				readFile(target, "utf8"),
+				readFile("src/styles/style-settings.css", "utf8"),
+			]);
+			const block = settings.slice(settings.indexOf("/* @settings"));
+			if (!css.includes("/* @settings")) await writeFile(target, `${block}\n${css}`);
+		});
+	},
+};
+
 const shared = {
 	bundle: true,
 	format: "cjs",
+	platform: "browser",
 	target: "es2020",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
@@ -61,7 +85,10 @@ const shared = {
 const js = await esbuild.context({
 	...shared,
 	entryPoints: ["src/main.ts"],
-	external: ["obsidian", "electron", ...builtins],
+	// `builtin-modules` lists bare names ("fs"), so the `node:`-prefixed forms must be listed
+	// too or esbuild tries to bundle them. They stay as runtime requires: `sources/books/db.ts`
+	// is imported lazily and only on desktop, so mobile never evaluates them.
+	external: ["obsidian", "electron", ...builtins, ...builtins.map((m) => `node:${m}`)],
 	outfile: path.join(outDir, "main.js"),
 	plugins: [copyManifest],
 });
@@ -71,6 +98,7 @@ const css = await esbuild.context({
 	entryPoints: ["src/styles/index.css"],
 	outfile: path.join(outDir, "styles.css"),
 	format: undefined,
+	plugins: [appendStyleSettings],
 });
 
 if (prod) {

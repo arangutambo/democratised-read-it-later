@@ -1,0 +1,74 @@
+.theme-light,
+.theme-dark {
+	--reader-measure: 66ch;
+	--reader-font-size: 18px;
+	--reader-line-height: 1.6;
+	--reader-font: "";
+}
+
+.theme-light {
+	--reader-highlight-accent: #d9a441;
+	--reader-highlight-background: #faf6ec;
+}
+
+.theme-dark {
+	--reader-highlight-accent: #e0b060;
+	--reader-highlight-background: #26221a;
+}
+
+/*
+ * Applied by the post-processor to the rendered container, and removed again when the note
+ * is torn down — preview containers are reused, so this must not be sticky.
+ */
+.reader-note {
+	font-size: var(--reader-font-size);
+	line-height: var(--reader-line-height);
+}
+
+.reader-note .markdown-preview-sizer > div,
+.reader-note > div {
+	max-width: var(--reader-measure);
+	margin-inline: auto;
+}
+
+.reader-note p,
+.reader-note li {
+	font-family: var(--reader-font), var(--font-text);
+	line-height: var(--reader-line-height);
+	/* Prose reads better slightly loose; headings keep the theme's own rhythm. */
+	margin-block: 0.9em;
+}
+
+.reader-note h1,
+.reader-note h2,
+.reader-note h3 {
+	margin-block: 1.6em 0.6em;
+}
+
+.reader-highlight {
+	background: var(--reader-highlight-background);
+	border-left: 3px solid var(--reader-highlight-accent);
+	border-radius: 0 4px 4px 0;
+	padding: 0.35em 0.9em;
+	margin-block: 1em;
+	font-style: normal;
+}
+
+.reader-highlight p:first-child {
+	margin-top: 0;
+}
+
+.reader-highlight p:last-child {
+	margin-bottom: 0;
+}
+
+/* The colour-meaning label the default template writes under a highlight. */
+.reader-highlight em {
+	display: inline-block;
+	margin-top: 0.35em;
+	font-size: var(--font-ui-smaller);
+	font-style: normal;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}

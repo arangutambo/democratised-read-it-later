@@ -4,8 +4,18 @@ A read-it-later, reader-mode, highlighting and research-capture system for Obsid
 Safari extension to follow. Reading, annotating and citing are meant to be the same act, over
 plain files you own.
 
-**Status: M1 — scaffold.** No features yet. Settings load, save, validate and migrate; the
-teardown registry is in place and asserted; the build pipeline works. That is all, by design.
+**Status: M2.** Apple Books highlights import into notes carrying a citekey, CSL frontmatter
+and a managed highlights region, and the reader skin renders them. 143 tests, no browser.
+
+### Apple Books requires Full Disk Access
+
+`~/Library/Containers/com.apple.iBooksX/` is TCC-protected, so **Obsidian must be granted
+Full Disk Access** before the import can read it: System Settings → Privacy & Security →
+Full Disk Access → add Obsidian → quit and reopen Obsidian.
+
+Without it the read does not fail cleanly — measured, it never returns at all. Every call
+against the Books databases is therefore wrapped in a timeout and reports the fix above
+rather than hanging Obsidian.
 
 - [`DESIGN.md`](DESIGN.md) — the original design interrogation. Statement of intent.
 - [`PLAN.md`](PLAN.md) — what actually gets built, in what order. **Supersedes `DESIGN.md`
@@ -16,7 +26,8 @@ teardown registry is in place and asserted; the build pipeline works. That is al
 ```bash
 npm install
 npm run dev            # watch build, straight into the vault, Hot Reload picks it up
-npm test               # 38 tests, no browser required
+npm test               # 143 tests, no browser required
+npm run books:dry-run  # run the Books pipeline on real data, writing nothing
 npm run build          # typecheck + production build into the repo
 npm run install-local  # production build, copied into the vault
 ```

@@ -40,7 +40,10 @@ export interface FeatureFlags {
 export type FeatureKey = keyof FeatureFlags;
 
 /** Subsystems that actually exist. Everything else is scaffolding for a later milestone. */
-export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>();
+export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
+	"readerSkin",
+	"booksImport",
+]);
 
 export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: string }> = {
 	readerSkin: {
@@ -99,8 +102,8 @@ export interface ReaderSettings {
 export const DEFAULT_SETTINGS: ReaderSettings = {
 	schemaVersion: SETTINGS_SCHEMA_VERSION,
 	features: {
-		readerSkin: false,
-		booksImport: false,
+		readerSkin: true,
+		booksImport: true,
 		pdfImport: false,
 		slidesImport: false,
 		webClip: false,

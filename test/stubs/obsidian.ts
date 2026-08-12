@@ -6,7 +6,33 @@
  * recalled. This exists so the plugin lifecycle can be asserted without a running Obsidian.
  */
 
-export class App {}
+export class App {
+	workspace = {
+		getActiveViewOfType: (): unknown => null,
+	};
+}
+
+export class MarkdownView {}
+export class TFile {}
+export class TFolder {}
+
+export const Platform = { isDesktopApp: true, isMacOS: true, isMobile: false };
+
+export function normalizePath(p: string): string {
+	return p.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+export class MarkdownRenderChild {
+	constructor(public containerEl: HTMLElement) {}
+	onunload(): void {}
+}
+
+export interface Command {
+	id: string;
+	name: string;
+	checkCallback?: (checking: boolean) => boolean | void;
+	callback?: () => unknown;
+}
 
 export interface PluginManifest {
 	id: string;
@@ -28,6 +54,8 @@ export class Notice {
 export class Plugin {
 	settings?: unknown;
 	readonly settingTabs: PluginSettingTab[] = [];
+	readonly commands: Command[] = [];
+	readonly postProcessors: unknown[] = [];
 	private readonly registered: (() => unknown)[] = [];
 
 	constructor(
@@ -37,6 +65,16 @@ export class Plugin {
 
 	addSettingTab(tab: PluginSettingTab): void {
 		this.settingTabs.push(tab);
+	}
+
+	addCommand(command: Command): Command {
+		this.commands.push(command);
+		return command;
+	}
+
+	registerMarkdownPostProcessor(processor: unknown): unknown {
+		this.postProcessors.push(processor);
+		return processor;
 	}
 
 	register(cb: () => unknown): void {

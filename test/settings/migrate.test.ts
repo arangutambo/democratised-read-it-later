@@ -23,10 +23,10 @@ describe("migrateSettings", () => {
 
 		it("does not share mutable state with DEFAULT_SETTINGS", () => {
 			const { settings } = migrateSettings(null);
-			settings.features.readerSkin = true;
+			settings.features.readerSkin = !settings.features.readerSkin;
 			settings.highlightColours.push({ id: "x", name: "x", css: "", sourceKeys: [] });
 
-			expect(DEFAULT_SETTINGS.features.readerSkin).toBe(false);
+			expect(DEFAULT_SETTINGS.features.readerSkin).toBe(true);
 			expect(DEFAULT_SETTINGS.highlightColours).toHaveLength(0);
 		});
 	});
@@ -65,7 +65,8 @@ describe("migrateSettings", () => {
 			});
 
 			expect(settings.features.readerSkin).toBe(true);
-			expect(settings.features.booksImport).toBe(false);
+			// A wrongly typed flag falls back to its own default, whatever that currently is.
+			expect(settings.features.booksImport).toBe(DEFAULT_SETTINGS.features.booksImport);
 			expect(settings.features).not.toHaveProperty("notARealFeature");
 		});
 
