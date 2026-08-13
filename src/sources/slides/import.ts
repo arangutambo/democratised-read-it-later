@@ -18,6 +18,7 @@ import { normalizePath, TFile, TFolder, type App } from "obsidian";
 import { baseCitekey } from "../../core/ids";
 import { findRegion, writeRegion } from "../../core/managed-region";
 import { joinVaultPath, sanitiseFileName } from "../../core/paths";
+import { claimNotePath } from "../../note/ownership";
 import { extractPdf, PdfUnavailableError, type PdfMetadata } from "./extract";
 import { toLines } from "./layout";
 import { buildDeckBody, slideRegionName, summarise } from "./note";
@@ -95,18 +96,17 @@ export function pickTitle(deckTitle: string | undefined, metadataTitle: string |
  * The deck's own filename is appended only when the path is genuinely taken by a *different*
  * deck, so re-importing the same deck keeps writing to the same note.
  */
-export function uniqueNotePath(app: App, sourcesFolder: string, title: string, baseName: string, sourceId: string): string {
+export async function uniqueNotePath(
+	app: App,
+	sourcesFolder: string,
+	title: string,
+	baseName: string,
+	sourceId: string,
+): Promise<string> {
 	const candidate = (name: string): string =>
 		normalizePath(joinVaultPath(sourcesFolder, `${sanitiseFileName(name, baseName)}.md`));
 
-	const preferred = candidate(title);
-	const existing = app.vault.getAbstractFileByPath(preferred);
-	if (!(existing instanceof TFile)) return preferred;
-
-	const owner = app.metadataCache.getFileCache(existing)?.frontmatter?.readerSourceId;
-	if (owner === sourceId) return preferred;
-
-	return candidate(`${title} (${baseName})`);
+	return claimNotePath(app, sourceId, candidate(title), candidate(`${title} (${baseName})`));
 }
 
 /** A year in the filename or PDF metadata, used only to strengthen the citekey. */
@@ -199,7 +199,7 @@ export async function importDeck(
 	}
 
 	await ensureFolder(app, normalizePath(joinVaultPath(sourcesFolder)));
-	const notePath = uniqueNotePath(app, sourcesFolder, title, baseName, deckPath);
+	const notePath = await uniqueNotePath(app, sourcesFolder, title, baseName, deckPath);
 	const existing = app.vault.getAbstractFileByPath(notePath);
 
 	if (existing instanceof TFile) {

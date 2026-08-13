@@ -10,6 +10,7 @@ import { normalizePath, TFile, TFolder, type App, type Vault } from "obsidian";
 
 import { joinVaultPath, sanitiseFileName } from "../core/paths";
 import { writeRegion, type WriteStatus } from "../core/managed-region";
+import { claimNotePath } from "./ownership";
 import type { ImportResult } from "../core/types";
 import { DEFAULT_HIGHLIGHTS_TEMPLATE, DEFAULT_NOTE_TEMPLATE, render } from "../template/engine";
 import { buildVariables, type ColourResolver } from "../template/variables";
@@ -55,32 +56,25 @@ async function ensureFolder(vault: Vault, folder: string): Promise<void> {
 	}
 }
 
-/** The `readerSourceId` recorded in a note's frontmatter, if it has one. */
-function sourceIdOf(app: App, path: string): string | undefined {
-	const file = app.vault.getAbstractFileByPath(path);
-	if (!(file instanceof TFile)) return undefined;
-	const id = app.metadataCache.getFileCache(file)?.frontmatter?.readerSourceId;
-	return typeof id === "string" && id !== "" ? id : undefined;
-}
-
 /**
  * A filename that belongs to this source alone.
  *
  * Two distinct books can produce the same filename — most obviously when neither is in the
  * Books library any more and both are titled "Untitled", which is the case for two real
- * assets here holding 1 and 58 highlights. Without this the second import would find the
- * first's note and quietly merge into it, silently fusing two books' highlights.
- *
- * The citekey is appended only when the name is genuinely taken by a *different* source, so
- * re-importing the same book keeps writing to the same file.
+ * assets holding 1 and 58 highlights. Without this the second import finds the first's note
+ * and quietly merges into it, fusing two books' highlights.
  */
-function uniqueFileName(app: App, folder: string, result: ImportResult): string {
+async function uniqueFileName(app: App, folder: string, result: ImportResult): Promise<string> {
 	const base = sanitiseFileName(result.source.title, result.source.citekey);
-	const basePath = normalizePath(joinVaultPath(folder, `${base}.md`));
-	const owner = sourceIdOf(app, basePath);
+	const withKey = sanitiseFileName(`${base} (${result.source.citekey})`, result.source.citekey);
 
-	if (owner === undefined || owner === result.source.id) return base;
-	return sanitiseFileName(`${base} (${result.source.citekey})`, result.source.citekey);
+	const chosen = await claimNotePath(
+		app,
+		result.source.id,
+		normalizePath(joinVaultPath(folder, `${base}.md`)),
+		normalizePath(joinVaultPath(folder, `${withKey}.md`)),
+	);
+	return chosen;
 }
 
 export async function writeImport(
@@ -92,8 +86,7 @@ export async function writeImport(
 	const folder = normalizePath(joinVaultPath(options.sourcesFolder));
 	await ensureFolder(vault, folder);
 
-	const fileName = uniqueFileName(app, folder, result);
-	const path = normalizePath(joinVaultPath(folder, `${fileName}.md`));
+	const path = await uniqueFileName(app, folder, result);
 
 	const needsReview = result.confidence < options.confidenceThreshold;
 	const source = needsReview ? { ...result.source, state: "needs-review" as const } : result.source;
@@ -126,10 +119,10 @@ export async function writeImport(
 
 	if (outcome.status === "conflict") {
 		// The user edited inside our region. Their version stays; ours lands beside it.
-		const conflictPath = normalizePath(joinVaultPath(folder, `${fileName}.conflict.md`));
+		const conflictPath = path.replace(/\.md$/, ".conflict.md");
 		const notice =
 			`> [!warning] Reader could not update this note\n` +
-			`> The highlights region in [[${fileName}]] was edited by hand since Reader last wrote it,\n` +
+			`> The highlights region in [[${path.split("/").pop()?.replace(/\.md$/, "")}]] was edited by hand\n` +
 			`> so nothing was overwritten. Below is what Reader would have written. Merge what you\n` +
 			`> want, then delete this file.\n\n`;
 

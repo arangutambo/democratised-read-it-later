@@ -46,6 +46,8 @@ function fakeApp(): { app: App; vault: FakeVault } {
 	const app = {
 		vault,
 		metadataCache: {
+			// Models the real cache: a file created moments ago is not in it yet, so callers
+			// must fall back to reading the file. Entries appear only when set explicitly.
 			getFileCache: (file: { path: string }) => ({ frontmatter: vault.frontmatter.get(file.path) }),
 		},
 	} as unknown as App;
@@ -175,5 +177,20 @@ describe("writeImport", () => {
 		const second = await writeImport(app, importResult({ id: "A", title: "Untitled" }), options);
 
 		expect(second.path).toBe(first.path);
+	});
+
+	it("separates two books even when the metadata cache has not caught up", async () => {
+		/*
+		 * The real failure: metadataCache.getFileCache() is asynchronous, so a note created
+		 * milliseconds earlier is invisible to it. Importing 23 books produced 22 notes —
+		 * one book's 58 highlights replaced another's. No frontmatter is registered with the
+		 * fake cache here, which is exactly that situation.
+		 */
+		const first = await writeImport(app, importResult({ id: "A", title: "Untitled", citekey: "untitled" }), options);
+		const second = await writeImport(app, importResult({ id: "B", title: "Untitled", citekey: "untitleda" }), options);
+
+		expect(vault.frontmatter.has(first.path)).toBe(false);
+		expect(second.path).not.toBe(first.path);
+		expect(second.status).toBe("created");
 	});
 });

@@ -22,12 +22,18 @@ import { buildSlides } from "../../../src/sources/slides/structure";
  * generator's idea of a PDF rather than the ones this plugin has to survive.
  */
 
-const REAL_DECK = path.join(
-	process.env.HOME ?? "",
-	"Downloads",
-	"BINF7001_2026_WEEK1_IntroductoryLecture.pdf",
-);
+/**
+ * Candidate homes for the fixture deck, most durable first. The vault copy is written by the
+ * importer and stays put; a downloads folder is transient, and pointing the tests there once
+ * meant they silently began skipping the moment the file was tidied away.
+ */
+const DECK_NAME = "BINF7001_2026_WEEK1_IntroductoryLecture.pdf";
+const CANDIDATES = [
+	path.join(process.env.HOME ?? "", "Documents", "🧠 Second Brain", "Sources", "_decks", DECK_NAME),
+	path.join(process.env.HOME ?? "", "Downloads", DECK_NAME),
+];
 
+const REAL_DECK = CANDIDATES.find((candidate) => existsSync(candidate)) ?? CANDIDATES[0];
 const hasRealDeck = existsSync(REAL_DECK);
 const withDeck = hasRealDeck ? describe : describe.skip;
 
