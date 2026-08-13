@@ -61,6 +61,54 @@ async function ensureFolder(app: App, folder: string): Promise<void> {
 	}
 }
 
+/**
+ * A deck title good enough to name a note after.
+ *
+ * Priority is filename-first in all but the clearest case, which is the opposite of what
+ * seems natural, and the real corpus is why:
+ *
+ * - A **title-slide** title is best when it is substantial — "BINF7001 Advanced Genome
+ *   Informatics Module 1" beats the filename. But one deck's title slide just reads "notes",
+ *   which produced a note called `notes.md` with the citekey `personalnotes`.
+ * - The **PDF metadata** Title is actively dangerous: several BINF7001 exports all carry
+ *   "BINF7001_2026_WEEK1_allSlides" regardless of which week they are, so trusting it
+ *   collapsed distinct decks onto one filename. It is now the last resort, not the second.
+ * - The **filename** is the one thing guaranteed to differ between two files in a folder.
+ */
+export function pickTitle(deckTitle: string | undefined, metadataTitle: string | undefined, baseName: string): string {
+	const substantial = (value: string | undefined): value is string =>
+		value !== undefined && value.trim().length >= 8 && value.trim().split(/\s+/).length >= 2;
+
+	if (substantial(deckTitle)) return deckTitle.trim();
+	if (baseName.trim() !== "") return baseName.trim();
+	if (substantial(metadataTitle)) return metadataTitle.trim();
+	return "Untitled deck";
+}
+
+/**
+ * A note path that belongs to this deck alone.
+ *
+ * Without this, two decks whose titles collide share a note: the second import finds the
+ * first's file and rewrites its slide regions, so a note named after one lecture ends up
+ * holding another's text. That happened to three of twenty-two real decks.
+ *
+ * The deck's own filename is appended only when the path is genuinely taken by a *different*
+ * deck, so re-importing the same deck keeps writing to the same note.
+ */
+export function uniqueNotePath(app: App, sourcesFolder: string, title: string, baseName: string, sourceId: string): string {
+	const candidate = (name: string): string =>
+		normalizePath(joinVaultPath(sourcesFolder, `${sanitiseFileName(name, baseName)}.md`));
+
+	const preferred = candidate(title);
+	const existing = app.vault.getAbstractFileByPath(preferred);
+	if (!(existing instanceof TFile)) return preferred;
+
+	const owner = app.metadataCache.getFileCache(existing)?.frontmatter?.readerSourceId;
+	if (owner === sourceId) return preferred;
+
+	return candidate(`${title} (${baseName})`);
+}
+
 /** A year in the filename or PDF metadata, used only to strengthen the citekey. */
 function yearOf(fileName: string, metadata: PdfMetadata): number | undefined {
 	const fromName = /\b(20\d{2})\b/.exec(fileName);
@@ -141,7 +189,7 @@ export async function importDeck(
 	}
 
 	const baseName = source.fileName.replace(/\.pdf$/i, "");
-	const title = outline.title ?? extracted.metadata.title ?? baseName;
+	const title = pickTitle(outline.title, extracted.metadata.title, baseName);
 
 	// Copy the deck in so the page embeds resolve.
 	await ensureFolder(app, normalizePath(joinVaultPath(decksFolder)));
@@ -151,7 +199,7 @@ export async function importDeck(
 	}
 
 	await ensureFolder(app, normalizePath(joinVaultPath(sourcesFolder)));
-	const notePath = normalizePath(joinVaultPath(sourcesFolder, `${sanitiseFileName(title, baseName)}.md`));
+	const notePath = uniqueNotePath(app, sourcesFolder, title, baseName, deckPath);
 	const existing = app.vault.getAbstractFileByPath(notePath);
 
 	if (existing instanceof TFile) {
