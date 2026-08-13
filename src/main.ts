@@ -188,7 +188,10 @@ export default class ReaderPlugin extends Plugin {
 			return;
 		}
 
-		const { importDeck, readExternalPdfs, PdfUnavailableError } = await import("./sources/slides/import");
+		const { importDeck, PdfUnavailableError } = await import("./sources/slides/import");
+		// Separate module: it imports node builtins statically, which is the only form that
+		// survives esbuild into a working require() inside Obsidian.
+		const { readExternalPdfs, DeckInboxError } = await import("./sources/slides/inbox");
 		const notice = new Notice("Reader: looking for slide decks…", 0);
 
 		try {
@@ -225,7 +228,10 @@ export default class ReaderPlugin extends Plugin {
 			window.setTimeout(() => notice.hide(), 12_000);
 		} catch (error) {
 			notice.hide();
-			const message = error instanceof PdfUnavailableError ? error.message : "Deck import failed — check the console.";
+			const message =
+				error instanceof PdfUnavailableError || error instanceof DeckInboxError
+					? error.message
+					: "Deck import failed — check the console.";
 			this.log.error("deck inbox import failed", error);
 			new Notice(`Reader: ${message}`, 15_000);
 		}

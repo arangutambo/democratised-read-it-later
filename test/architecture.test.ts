@@ -46,10 +46,38 @@ function pureFiles(): string[] {
 
 const IMPORTS_OBSIDIAN = /(?:from\s+["']obsidian["']|require\(\s*["']obsidian["']\s*\))/;
 
+/**
+ * Strip comments before scanning for forbidden patterns.
+ *
+ * Without this, a comment *documenting* a banned form trips the very rule it explains —
+ * which is exactly what happened the first time this test ran.
+ */
+function stripComments(source: string): string {
+	return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
 describe("architecture", () => {
 	it("keeps the pure layers free of `obsidian` imports", () => {
 		const offenders = pureFiles()
 			.filter((file) => IMPORTS_OBSIDIAN.test(readFileSync(file, "utf8")))
+			.map((file) => path.relative(SRC, file));
+
+		expect(offenders).toEqual([]);
+	});
+
+	it("never imports a node builtin dynamically", () => {
+		/*
+		 * esbuild compiles a *static* import of an external module into `require("node:fs")`,
+		 * which Electron resolves natively. A *dynamic* `await import("node:fs")` survives as a
+		 * real ESM import, which the renderer treats as a URL fetch and Obsidian's
+		 * app://obsidian.md origin turns into a CORS failure. This reached a real Obsidian
+		 * window once; it does not get to happen twice.
+		 *
+		 * Defer evaluation by lazily importing the *local module* that holds the static
+		 * imports, not by making the builtin import itself dynamic.
+		 */
+		const offenders = walk(SRC)
+			.filter((file) => /import\s*\(\s*["']node:/.test(stripComments(readFileSync(file, "utf8"))))
 			.map((file) => path.relative(SRC, file));
 
 		expect(offenders).toEqual([]);

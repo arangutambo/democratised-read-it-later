@@ -210,25 +210,3 @@ export async function importDeck(
 export async function readVaultPdf(app: App, file: TFile): Promise<{ data: ArrayBuffer; fileName: string }> {
 	return { data: await app.vault.readBinary(file), fileName: file.name };
 }
-
-/**
- * Read PDFs from a folder outside the vault — a downloads folder full of lecture slides.
- * Desktop only; the caller gates on `Platform.isDesktopApp` and imports this lazily.
- */
-export async function readExternalPdfs(folder: string): Promise<{ data: ArrayBuffer; fileName: string }[]> {
-	const { readdir, readFile } = await import("node:fs/promises");
-	const path = await import("node:path");
-
-	const entries = (await readdir(folder)).filter((e) => e.toLowerCase().endsWith(".pdf")).sort();
-	const out: { data: ArrayBuffer; fileName: string }[] = [];
-
-	for (const entry of entries) {
-		const buffer = await readFile(path.join(folder, entry));
-		out.push({
-			data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
-			fileName: entry,
-		});
-	}
-
-	return out;
-}
