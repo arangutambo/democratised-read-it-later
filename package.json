@@ -11,7 +11,8 @@
 		"test:watch": "vitest",
 		"typecheck": "tsc -noEmit -skipLibCheck",
 		"books:dry-run": "esbuild tools/books-dry-run.ts --bundle --platform=node --format=cjs --outfile=.dry-run.cjs --log-level=error && node .dry-run.cjs",
-		"anchor:bench": "esbuild tools/anchor-bench.ts --bundle --platform=node --format=cjs --outfile=.bench.cjs --log-level=error && node .bench.cjs"
+		"anchor:bench": "esbuild tools/anchor-bench.ts --bundle --platform=node --format=cjs --outfile=.bench.cjs --log-level=error && node .bench.cjs",
+		"slides:dry-run": "esbuild tools/slides-dry-run.ts --bundle --platform=node --format=cjs --outfile=.slides.cjs --log-level=error && node .slides.cjs"
 	},
 	"keywords": [],
 	"license": "MIT",

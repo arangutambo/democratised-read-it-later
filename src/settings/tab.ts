@@ -63,6 +63,38 @@ export class ReaderSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
+			.setName("Slide decks folder")
+			.setDesc(
+				"Imported decks are copied here so their pages can be embedded in notes. " +
+					"Obsidian can only render a PDF that lives inside the vault.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Sources/_decks")
+					.setValue(this.plugin.settings.decksFolder)
+					.onChange((value) => {
+						this.plugin.settings.decksFolder = value.trim();
+						this.save();
+					}),
+			);
+
+		new Setting(el)
+			.setName("Slide deck inbox")
+			.setDesc(
+				"Absolute path to a folder outside the vault holding decks to import in bulk — " +
+					"a downloads folder, say. Leave blank to import decks one at a time instead.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("/Users/you/Downloads")
+					.setValue(this.plugin.settings.deckInboxPath)
+					.onChange((value) => {
+						this.plugin.settings.deckInboxPath = value.trim();
+						this.save();
+					}),
+			);
+
+		new Setting(el)
 			.setName("Progress file")
 			.setDesc(
 				"Reading progress is kept in this one file rather than in each note's frontmatter, " +

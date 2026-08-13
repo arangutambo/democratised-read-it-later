@@ -168,6 +168,8 @@ export function migrateSettings(
 		features: coerceFeatures(data.features, notes),
 		sourcesFolder: asString(data.sourcesFolder, DEFAULT_SETTINGS.sourcesFolder),
 		assetsFolder: asString(data.assetsFolder, DEFAULT_SETTINGS.assetsFolder),
+		decksFolder: asString(data.decksFolder, DEFAULT_SETTINGS.decksFolder),
+		deckInboxPath: asString(data.deckInboxPath, DEFAULT_SETTINGS.deckInboxPath),
 		libraryPath: asString(data.libraryPath, DEFAULT_SETTINGS.libraryPath),
 		progressFile: asString(data.progressFile, DEFAULT_SETTINGS.progressFile),
 		highlightColours: coerceColours(data.highlightColours, notes),

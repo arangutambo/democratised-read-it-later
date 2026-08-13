@@ -9,6 +9,7 @@
 export class App {
 	workspace = {
 		getActiveViewOfType: (): unknown => null,
+		getActiveFile: (): unknown => null,
 		getLeaf: (): { openFile: (file: unknown) => Promise<void> } => ({
 			openFile: async () => {},
 		}),
@@ -19,6 +20,9 @@ export class App {
 		getFileByPath: (): unknown => null,
 		getAbstractFileByPath: (): unknown => null,
 		create: async (): Promise<void> => {},
+		createBinary: async (): Promise<void> => {},
+		createFolder: async (): Promise<void> => {},
+		readBinary: async (): Promise<ArrayBuffer> => new ArrayBuffer(0),
 	};
 
 	metadataCache = {

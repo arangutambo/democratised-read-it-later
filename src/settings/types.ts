@@ -43,6 +43,7 @@ export type FeatureKey = keyof FeatureFlags;
 export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
 	"readerSkin",
 	"booksImport",
+	"slidesImport",
 ]);
 
 export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: string }> = {
@@ -60,7 +61,9 @@ export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: str
 	},
 	slidesImport: {
 		name: "Slides import",
-		description: "Turn slide decks into study notes, one heading per slide.",
+		description:
+			"Turn lecture slide decks into study notes — one heading per slide, the slide embedded, " +
+			"and room to write under each one.",
 	},
 	webClip: {
 		name: "Web clipping",
@@ -84,6 +87,19 @@ export interface ReaderSettings {
 	/** Vault-relative folder for cited images. Only assets you actually reference land here. */
 	assetsFolder: string;
 	/**
+	 * Vault-relative folder that imported slide decks are copied into.
+	 *
+	 * Decks live inside the vault deliberately: `![[deck.pdf#page=3]]` only resolves for a
+	 * file Obsidian can see, and embedding the real slide is what makes the note worth
+	 * opening. A semester of decks is tens of megabytes; books and video stay outside.
+	 */
+	decksFolder: string;
+	/**
+	 * Absolute path to a folder outside the vault holding decks waiting to be imported —
+	 * typically a downloads folder. Blank disables the bulk import command.
+	 */
+	deckInboxPath: string;
+	/**
 	 * Absolute path to the external library holding originals — EPUBs, full PDFs, decks.
 	 * Deliberately outside the vault: this vault is already 2.7 GB.
 	 */
@@ -105,13 +121,15 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 		readerSkin: true,
 		booksImport: true,
 		pdfImport: false,
-		slidesImport: false,
+		slidesImport: true,
 		webClip: false,
 		zotero: false,
 		ai: false,
 	},
 	sourcesFolder: "Sources",
 	assetsFolder: "Sources/_assets",
+	decksFolder: "Sources/_decks",
+	deckInboxPath: "",
 	libraryPath: "",
 	progressFile: "Sources/.reader-progress.json",
 	highlightColours: [],

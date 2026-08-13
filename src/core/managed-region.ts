@@ -107,7 +107,11 @@ export function findRegion(text: string, name: string): Region | null {
 	return null;
 }
 
-function render(name: string, content: string): string {
+/**
+ * Render a managed region. Exported so a generator building a document from scratch emits
+ * byte-identical markers to those `writeRegion` would later look for.
+ */
+export function renderRegion(name: string, content: string): string {
 	return `%% reader:begin ${name} hash=${contentHash(content)} %%\n${content}\n%% reader:end ${name} %%`;
 }
 
@@ -123,7 +127,7 @@ export function writeRegion(text: string, name: string, content: string): WriteR
 
 	if (region === null) {
 		const separator = text === "" ? "" : text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
-		return { text: `${text}${separator}${render(name, content)}\n`, status: "created" };
+		return { text: `${text}${separator}${renderRegion(name, content)}\n`, status: "created" };
 	}
 
 	if (region.tampered) {
@@ -133,7 +137,7 @@ export function writeRegion(text: string, name: string, content: string): WriteR
 	if (region.content === content) return { text, status: "unchanged" };
 
 	return {
-		text: text.slice(0, region.start) + render(name, content) + text.slice(region.end),
+		text: text.slice(0, region.start) + renderRegion(name, content) + text.slice(region.end),
 		status: "updated",
 	};
 }

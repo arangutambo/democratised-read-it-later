@@ -61,6 +61,28 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "deck-to-study-note",
+			name: "Turn this PDF into a study note",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension.toLowerCase() !== "pdf") return false;
+				if (!checking) void this.importDeckFile(file);
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "import-deck-inbox",
+			name: "Import all slide decks from the inbox folder",
+			checkCallback: (checking) => {
+				// Reading a folder outside the vault needs Node.
+				if (!Platform.isDesktopApp || this.settings.deckInboxPath === "") return false;
+				if (!checking) void this.importDeckInbox();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "import-apple-books",
 			name: "Import highlights from Apple Books",
 			checkCallback: (checking) => {
@@ -121,6 +143,91 @@ export default class ReaderPlugin extends Plugin {
 		} catch (error) {
 			this.log.error("could not open the review queue", error);
 			new Notice("Reader: could not open the review queue — check the console.");
+		}
+	}
+
+	private get slideOptions() {
+		return {
+			sourcesFolder: this.settings.sourcesFolder,
+			decksFolder: this.settings.decksFolder,
+		};
+	}
+
+	/** Turn one PDF already in the vault into a study note. */
+	private async importDeckFile(file: import("obsidian").TFile): Promise<void> {
+		if (!this.settings.features.slidesImport) {
+			new Notice("Reader: enable Slides import in settings first.");
+			return;
+		}
+
+		const { importDeck, readVaultPdf, PdfUnavailableError } = await import("./sources/slides/import");
+		const notice = new Notice(`Reader: reading ${file.name}…`, 0);
+
+		try {
+			const source = await readVaultPdf(this.app, file);
+			const result = await importDeck(this.app, source, {
+				...this.slideOptions,
+				onProgress: (_stage, page, total) => notice.setMessage(`Reader: slide ${page}/${total}`),
+			});
+
+			for (const warning of result.warnings) this.log.warn(`${result.title}: ${warning}`);
+			notice.setMessage(`Reader: ${result.title} — ${result.slideCount} slides, ${result.status}.`);
+			window.setTimeout(() => notice.hide(), 8_000);
+		} catch (error) {
+			notice.hide();
+			const message = error instanceof PdfUnavailableError ? error.message : "Could not read that PDF — check the console.";
+			this.log.error("deck import failed", error);
+			new Notice(`Reader: ${message}`, 15_000);
+		}
+	}
+
+	/** Bulk-import every deck sitting in the configured inbox folder. */
+	private async importDeckInbox(): Promise<void> {
+		if (!this.settings.features.slidesImport) {
+			new Notice("Reader: enable Slides import in settings first.");
+			return;
+		}
+
+		const { importDeck, readExternalPdfs, PdfUnavailableError } = await import("./sources/slides/import");
+		const notice = new Notice("Reader: looking for slide decks…", 0);
+
+		try {
+			const decks = await readExternalPdfs(this.settings.deckInboxPath);
+			if (decks.length === 0) {
+				notice.setMessage(`Reader: no PDFs in ${this.settings.deckInboxPath}.`);
+				window.setTimeout(() => notice.hide(), 8_000);
+				return;
+			}
+
+			let created = 0;
+			let updated = 0;
+			let unchanged = 0;
+			const warnings: string[] = [];
+
+			for (const [index, deck] of decks.entries()) {
+				notice.setMessage(`Reader: ${index + 1}/${decks.length} — ${deck.fileName}`);
+				const result = await importDeck(this.app, deck, this.slideOptions);
+
+				if (result.status === "created") created++;
+				else if (result.status === "updated") updated++;
+				else unchanged++;
+				for (const warning of result.warnings) warnings.push(`${result.title}: ${warning}`);
+
+				// Let the UI breathe between decks; a 47-page extraction is not instant.
+				await new Promise((resolve) => window.setTimeout(resolve, 0));
+			}
+
+			for (const warning of warnings) this.log.warn(warning);
+			notice.setMessage(
+				`Reader: ${decks.length} decks — ${created} new, ${updated} updated, ${unchanged} unchanged.` +
+					(warnings.length > 0 ? ` ${warnings.length} warning(s) in the console.` : ""),
+			);
+			window.setTimeout(() => notice.hide(), 12_000);
+		} catch (error) {
+			notice.hide();
+			const message = error instanceof PdfUnavailableError ? error.message : "Deck import failed — check the console.";
+			this.log.error("deck inbox import failed", error);
+			new Notice(`Reader: ${message}`, 15_000);
 		}
 	}
 
