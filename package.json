@@ -21,6 +21,7 @@
 		"builtin-modules": "^3.3.0",
 		"esbuild": "^0.25.12",
 		"obsidian": "^1.5.7",
+		"pdfjs-dist": "^6.2.108",
 		"typescript": "^5.4.5",
 		"vitest": "^3.2.7"
 	},

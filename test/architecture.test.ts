@@ -83,6 +83,17 @@ describe("architecture", () => {
 		expect(offenders).toEqual([]);
 	});
 
+	it("never imports pdf.js into shipped code", () => {
+		// `pdfjs-dist` is a devDependency used to exercise the extraction adapter against real
+		// decks in Node. Production uses Obsidian's own bundled copy via window.pdfjsLib;
+		// importing the package from src/ would silently add ~1 MB to every user's download.
+		const offenders = walk(SRC)
+			.filter((file) => /["']pdfjs-dist/.test(stripComments(readFileSync(file, "utf8"))))
+			.map((file) => path.relative(SRC, file));
+
+		expect(offenders).toEqual([]);
+	});
+
 	it("is actually scanning files, not passing vacuously", () => {
 		// A rename that empties PURE_DIRS would otherwise make the test above meaningless.
 		expect(pureFiles().length).toBeGreaterThan(0);

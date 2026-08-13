@@ -33,17 +33,34 @@ interface PdfDocument {
 	numPages: number;
 	getPage(pageNumber: number): Promise<PdfPage>;
 	getMetadata(): Promise<{ info?: Record<string, unknown> }>;
+}
+
+interface PdfLoadingTask {
+	promise: Promise<PdfDocument>;
+	/**
+	 * The one cleanup call that is stable across pdf.js versions, and which tears down the
+	 * document with it. `PDFDocumentProxy.destroy()` existed in older releases and is gone by
+	 * v6 — calling it inside a `finally` throws a TypeError that replaces whatever the
+	 * function was actually returning, turning a working extraction into an unrelated error.
+	 */
 	destroy(): Promise<void>;
 }
 
-interface PdfJsLib {
-	getDocument(source: { data: ArrayBuffer } | Uint8Array): { promise: Promise<PdfDocument>; destroy(): Promise<void> };
+export interface PdfJsLib {
+	getDocument(source: { data: ArrayBuffer | Uint8Array; isEvalSupported?: boolean }): PdfLoadingTask;
 }
 
 export class PdfUnavailableError extends Error {}
 
-function getPdfJs(): PdfJsLib {
-	const lib = (window as unknown as { pdfjsLib?: PdfJsLib }).pdfjsLib;
+/**
+ * Obsidian's bundled pdf.js.
+ *
+ * Exported so tests can supply their own implementation instead — `pdfjs-dist` is a
+ * devDependency used only to exercise this adapter against real decks in Node. Production
+ * still uses Obsidian's copy and ships no pdf.js of its own.
+ */
+export function obsidianPdfJs(): PdfJsLib {
+	const lib = (globalThis as unknown as { window?: { pdfjsLib?: PdfJsLib } }).window?.pdfjsLib;
 	if (!lib || typeof lib.getDocument !== "function") {
 		throw new PdfUnavailableError(
 			"Obsidian's PDF engine could not be reached (window.pdfjsLib). " +
@@ -73,6 +90,14 @@ export interface ExtractOptions {
 	onProgress?: (page: number, total: number) => void;
 	/** Pages processed between yields to the event loop. */
 	chunkSize?: number;
+	/**
+	 * The pdf.js implementation to use. Defaults to Obsidian's.
+	 *
+	 * This exists so the adapter is testable at all: without it, every line below could only
+	 * ever run inside a live Obsidian window, which is precisely how a CORS bug and a removed
+	 * `destroy()` both reached a real window before anything caught them.
+	 */
+	pdfjs?: PdfJsLib;
 }
 
 const DEFAULT_CHUNK = 5;
@@ -102,15 +127,29 @@ function toTextItems(items: readonly PdfTextItem[]): TextItem[] {
 	return out;
 }
 
-export async function extractPdf(data: ArrayBuffer, options: ExtractOptions = {}): Promise<ExtractedPdf> {
+export async function extractPdf(
+	data: ArrayBuffer | Uint8Array,
+	options: ExtractOptions = {},
+): Promise<ExtractedPdf> {
 	const { signal, onProgress, chunkSize = DEFAULT_CHUNK } = options;
-	const pdfjs = getPdfJs();
+	const pdfjs = options.pdfjs ?? obsidianPdfJs();
 
-	const task = pdfjs.getDocument({ data });
-	let document: PdfDocument | undefined;
+	/*
+	 * Normalise to a plain Uint8Array.
+	 *
+	 * pdf.js rejects a Node `Buffer` outright — "Please provide binary data as `Uint8Array`,
+	 * rather than `Buffer`" — even though Buffer extends Uint8Array, because a pooled Buffer
+	 * can be a view into a much larger allocation. Obsidian hands over an ArrayBuffer so this
+	 * never bites in production, but a function that accepts bytes should accept bytes.
+	 */
+	const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new Uint8Array(data);
+
+	// `isEvalSupported: false` keeps pdf.js from compiling font programs with eval, which a
+	// stricter Obsidian content-security policy would refuse anyway.
+	const task = pdfjs.getDocument({ data: bytes, isEvalSupported: false });
 
 	try {
-		document = await task.promise;
+		const document = await task.promise;
 
 		const meta = await document.getMetadata().catch(() => ({}) as { info?: Record<string, unknown> });
 		const info: Record<string, unknown> = meta.info ?? {};
@@ -141,8 +180,9 @@ export async function extractPdf(data: ArrayBuffer, options: ExtractOptions = {}
 
 		return { pageCount: document.numPages, pages, metadata };
 	} finally {
-		// A leaked document keeps its worker transport alive.
-		if (document) await document.destroy().catch(() => {});
-		else await task.destroy().catch(() => {});
+		// Destroying the loading task tears down the document and its worker transport. A
+		// leaked task keeps that transport open. Errors here are swallowed deliberately: a
+		// cleanup failure must not replace the real result or the real error.
+		await task.destroy().catch(() => {});
 	}
 }
