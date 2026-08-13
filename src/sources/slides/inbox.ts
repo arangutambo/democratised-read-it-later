@@ -31,32 +31,75 @@ export interface DeckFile {
 
 export class DeckInboxError extends Error {}
 
-/** Every PDF in `folder`, in name order, read into memory. */
-export async function readExternalPdfs(folder: string): Promise<DeckFile[]> {
-	let entries: string[];
+/**
+ * How deep to look for PDFs.
+ *
+ * People organise a downloads folder — "Lecture Slides", "Course Materials" — and a reader
+ * that only looks at the top level reports "no PDFs" while staring at twenty of them. Three
+ * levels covers any sane arrangement without walking an entire drive.
+ */
+const MAX_DEPTH = 3;
+
+function describe(error: unknown, folder: string): Error {
+	const code = (error as NodeJS.ErrnoException).code;
+	if (code === "ENOENT") return new DeckInboxError(`No such folder: ${folder}`);
+	if (code === "EACCES" || code === "EPERM") {
+		return new DeckInboxError(
+			`macOS blocked Reader from reading ${folder}. Grant Obsidian access to that folder ` +
+				`in System Settings → Privacy & Security, or move the PDFs somewhere else.`,
+		);
+	}
+	return error as Error;
+}
+
+/** Paths of every PDF under `folder`, including subfolders, in a stable order. */
+export async function findPdfs(folder: string, depth = MAX_DEPTH): Promise<string[]> {
+	let entries;
 	try {
-		entries = await readdir(folder);
+		entries = await readdir(folder, { withFileTypes: true });
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code === "ENOENT") throw new DeckInboxError(`No such folder: ${folder}`);
-		if (code === "EACCES" || code === "EPERM") {
-			throw new DeckInboxError(
-				`macOS blocked Reader from reading ${folder}. Grant Obsidian access to that folder ` +
-					`in System Settings → Privacy & Security, or move the decks somewhere else.`,
-			);
-		}
-		throw error;
+		throw describe(error, folder);
 	}
 
-	const pdfs = entries.filter((entry) => entry.toLowerCase().endsWith(".pdf")).sort();
+	const files: string[] = [];
+	const directories: string[] = [];
+
+	for (const entry of entries) {
+		// Skip dotfolders and macOS bundles; nothing a reader filed away lives in them.
+		if (entry.name.startsWith(".")) continue;
+		const full = path.join(folder, entry.name);
+		if (entry.isDirectory()) directories.push(full);
+		else if (entry.name.toLowerCase().endsWith(".pdf")) files.push(full);
+	}
+
+	files.sort();
+	directories.sort();
+
+	if (depth > 1) {
+		for (const directory of directories) {
+			// A subfolder we cannot read should not abort the whole import.
+			try {
+				files.push(...(await findPdfs(directory, depth - 1)));
+			} catch {
+				continue;
+			}
+		}
+	}
+
+	return files;
+}
+
+/** Every PDF under `folder`, read into memory. */
+export async function readExternalPdfs(folder: string): Promise<DeckFile[]> {
+	const paths = await findPdfs(folder);
 	const out: DeckFile[] = [];
 
-	for (const entry of pdfs) {
-		const buffer = await readFile(path.join(folder, entry));
+	for (const file of paths) {
+		const buffer = await readFile(file);
 		out.push({
 			// Node may hand back a view into a larger pooled buffer; slice to just this file.
 			data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
-			fileName: entry,
+			fileName: path.basename(file),
 		});
 	}
 
