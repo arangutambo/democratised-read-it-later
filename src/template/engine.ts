@@ -106,7 +106,7 @@ readerImported: {{ reader.importedAt }}
 
 # {{ title | oneline }}
 
-{% if reader.deepLink %}[Open in Apple Books]({{ reader.deepLink }})
+{% if reader.deepLink %}[Open in {{ reader.deepLinkApp }}]({{ reader.deepLink }})
 {% endif %}
 ## Notes
 

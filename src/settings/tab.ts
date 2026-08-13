@@ -95,6 +95,22 @@ export class ReaderSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
+			.setName("Zotero data directory")
+			.setDesc(
+				"Where Zotero keeps zotero.sqlite and its storage folder. Blank uses ~/Zotero. " +
+					"Reader only ever reads from it.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("~/Zotero")
+					.setValue(this.plugin.settings.zoteroDataDir)
+					.onChange((value) => {
+						this.plugin.settings.zoteroDataDir = value.trim();
+						this.save();
+					}),
+			);
+
+		new Setting(el)
 			.setName("Progress file")
 			.setDesc(
 				"Reading progress is kept in this one file rather than in each note's frontmatter, " +

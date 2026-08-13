@@ -13,7 +13,7 @@
  */
 
 import { blockId } from "../core/ids";
-import type { Csl, CslName, Highlight, SourceRecord } from "../core/types";
+import type { Csl, CslName, Highlight, SourceRecord, SourceType } from "../core/types";
 
 /** One entry of `{% for annotation in annotations %}`. */
 export interface AnnotationVariables {
@@ -58,9 +58,21 @@ export interface TemplateVariables {
 		state: string;
 		highlightCount: number;
 		orphanCount: number;
+		/** What the deep link opens, for a template to label the link with. */
+		deepLinkApp: string;
 		importedAt: string;
 	};
 }
+
+/** What each source's deep link opens, so a note does not offer to open a paper in Books. */
+const DEEP_LINK_APPS: Partial<Record<SourceType, string>> = {
+	books: "Apple Books",
+	paper: "Zotero",
+	pdf: "the PDF",
+	slides: "the deck",
+	epub: "the book",
+	web: "the page",
+};
 
 export function formatName(name: CslName): string {
 	if (name.literal) return name.literal;
@@ -131,6 +143,7 @@ export function buildVariables(
 			state: source.state,
 			highlightCount: highlights.length,
 			orphanCount: highlights.filter((h) => h.state === "orphaned").length,
+			deepLinkApp: DEEP_LINK_APPS[source.sourceType] ?? "the source",
 			importedAt,
 		},
 	};

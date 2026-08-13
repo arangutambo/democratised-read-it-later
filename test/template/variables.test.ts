@@ -57,6 +57,13 @@ describe("the Zotero Integration variable contract", () => {
 		expect(a.attachment).toHaveProperty("itemKey");
 	});
 
+	it("labels the deep link with what it actually opens", () => {
+		// A Zotero paper offered "Open in Apple Books" until this existed.
+		expect(buildVariables(source, [highlight]).reader.deepLinkApp).toBe("Apple Books");
+		expect(buildVariables({ ...source, sourceType: "paper" }, []).reader.deepLinkApp).toBe("Zotero");
+		expect(buildVariables({ ...source, sourceType: "slides" }, []).reader.deepLinkApp).toBe("the deck");
+	});
+
 	it("namespaces our own additions under reader.", () => {
 		const v = buildVariables(source, [highlight]);
 		expect(v.reader.sourceType).toBe("books");

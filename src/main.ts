@@ -83,6 +83,16 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "import-zotero",
+			name: "Migrate highlights from Zotero",
+			checkCallback: (checking) => {
+				if (!Platform.isDesktopApp) return false;
+				if (!checking) void this.importZotero();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "import-apple-books",
 			name: "Import highlights from Apple Books",
 			checkCallback: (checking) => {
@@ -233,6 +243,47 @@ export default class ReaderPlugin extends Plugin {
 					? error.message
 					: "Deck import failed — check the console.";
 			this.log.error("deck inbox import failed", error);
+			new Notice(`Reader: ${message}`, 15_000);
+		}
+	}
+
+	private async importZotero(): Promise<void> {
+		if (!this.settings.features.zotero) {
+			new Notice("Reader: enable Zotero in settings first.");
+			return;
+		}
+
+		const { importFromZotero, ZoteroUnavailableError } = await import("./sources/zotero/import");
+		const notice = new Notice("Reader: reading Zotero…", 0);
+
+		try {
+			const summary = await importFromZotero(this.app, {
+				sourcesFolder: this.settings.sourcesFolder,
+				confidenceThreshold: this.settings.importConfidenceThreshold,
+				resolveColour: this.resolveColour,
+				dataDir: this.settings.zoteroDataDir,
+				onProgress: (current, total, label) => notice.setMessage(`Reader: ${current}/${total} — ${label}`),
+			});
+
+			for (const warning of summary.warnings) this.log.warn(warning);
+			for (const note of summary.notes) {
+				for (const warning of note.warnings) this.log.warn(`${note.title}: ${warning}`);
+			}
+
+			const parts = [
+				`${summary.totalHighlights} highlights across ${summary.notes.length} item(s)`,
+				`${summary.created} new, ${summary.updated} updated, ${summary.unchanged} unchanged`,
+			];
+			if (summary.conflicts > 0) parts.push(`${summary.conflicts} conflict(s)`);
+			if (summary.needsReview > 0) parts.push(`${summary.needsReview} need review`);
+
+			notice.setMessage(`Reader: migrated ${parts.join(". ")}.`);
+			window.setTimeout(() => notice.hide(), 12_000);
+		} catch (error) {
+			notice.hide();
+			const message =
+				error instanceof ZoteroUnavailableError ? error.message : "Zotero migration failed — check the console.";
+			this.log.error("Zotero migration failed", error);
 			new Notice(`Reader: ${message}`, 15_000);
 		}
 	}

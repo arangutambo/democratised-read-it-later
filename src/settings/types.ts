@@ -44,6 +44,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>
 	"readerSkin",
 	"booksImport",
 	"slidesImport",
+	"zotero",
 ]);
 
 export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: string }> = {
@@ -71,7 +72,9 @@ export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: str
 	},
 	zotero: {
 		name: "Zotero",
-		description: "Read your Zotero library and migrate its annotations. Never writes to Zotero.",
+		description:
+			"Migrate highlights out of Zotero into notes, using Better BibTeX's own citekeys so " +
+			"your notes and your .bib agree. Reads only; never writes to Zotero.",
 	},
 	ai: {
 		name: "AI",
@@ -99,6 +102,8 @@ export interface ReaderSettings {
 	 * typically a downloads folder. Blank disables the bulk import command.
 	 */
 	deckInboxPath: string;
+	/** Zotero's data directory. Blank uses ~/Zotero. */
+	zoteroDataDir: string;
 	/**
 	 * Absolute path to the external library holding originals — EPUBs, full PDFs, decks.
 	 * Deliberately outside the vault: this vault is already 2.7 GB.
@@ -123,13 +128,14 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 		pdfImport: false,
 		slidesImport: true,
 		webClip: false,
-		zotero: false,
+		zotero: true,
 		ai: false,
 	},
 	sourcesFolder: "Sources",
 	assetsFolder: "Sources/_assets",
 	decksFolder: "Sources/_decks",
 	deckInboxPath: "",
+	zoteroDataDir: "",
 	libraryPath: "",
 	progressFile: "Sources/.reader-progress.json",
 	highlightColours: [],
