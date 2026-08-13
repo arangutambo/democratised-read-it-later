@@ -1,7 +1,12 @@
 /**
- * Slide deck → study note, end to end.
+ * PDF → study note, end to end, for both slide decks and prose documents.
  *
- * The deck itself is copied into the vault. `![[deck.pdf#page=3]]` only resolves for a file
+ * Which one a file is gets decided by `pdf/shape.ts`, because the two want different notes:
+ * a deck's page is its unit of meaning, a handout's page break is an accident of pagination.
+ * Decks become one heading per slide with the slide embedded; documents are split by their
+ * own headings, with a page link rather than an embed.
+ *
+ * The PDF itself is copied into the vault. `![[deck.pdf#page=3]]` only resolves for a file
  * Obsidian can see, and embedding the real page is what makes the note worth opening. That
  * is a deliberate exception to PLAN.md §0.4's "originals stay outside the vault": a semester
  * of lecture slides is tens of megabytes against the 2.4 GB of images the vault already
@@ -19,10 +24,13 @@ import { baseCitekey } from "../../core/ids";
 import { findRegion, writeRegion } from "../../core/managed-region";
 import { joinVaultPath, sanitiseFileName } from "../../core/paths";
 import { claimNotePath } from "../../note/ownership";
+import { buildDocumentBody, sectionRegionName, summarise as summariseDocument } from "../document/note";
+import { buildSections, outlineOf as outlineDocument } from "../document/structure";
+import { classifyShape, type PdfShape } from "../pdf/shape";
 import { extractPdf, PdfUnavailableError, type PdfMetadata } from "./extract";
-import { toLines } from "./layout";
+import { linesToText, toLines } from "./layout";
 import { buildDeckBody, slideRegionName, summarise } from "./note";
-import { buildSlides, outlineOf, type Slide } from "./structure";
+import { buildSlides, outlineOf } from "./structure";
 
 export { PdfUnavailableError };
 
@@ -39,6 +47,8 @@ export interface DeckImportResult {
 	notePath: string;
 	deckPath: string;
 	title: string;
+	/** How the PDF was read: as a deck of slides, or as a prose document. */
+	shape: PdfShape;
 	slideCount: number;
 	status: "created" | "updated" | "unchanged";
 	/** Slides whose managed region was hand-edited and therefore left untouched. */
@@ -130,9 +140,15 @@ function frontmatter(fields: Record<string, string | number | undefined>): strin
  * Deliberately not a wholesale rewrite: everything between the regions is the reader's own
  * writing, and that is the entire product.
  */
+interface UpdatableBlock {
+	index: number;
+	text: string;
+	region: string;
+}
+
 function updateExisting(
 	current: string,
-	slides: readonly Slide[],
+	blocks: readonly UpdatableBlock[],
 	includeText: boolean,
 ): { text: string; changed: boolean; conflicted: number[] } {
 	let text = current;
@@ -141,20 +157,19 @@ function updateExisting(
 
 	if (!includeText) return { text, changed, conflicted };
 
-	for (const slide of slides) {
-		if (slide.text === "") continue;
-		const name = slideRegionName(slide.index);
+	for (const block of blocks) {
+		if (block.text === "") continue;
 		// Only touch regions this note already has; adding new ones would append them all at
-		// the end, far from the slide they belong to.
-		if (!findRegion(text, name)) continue;
+		// the end, far from the slide or section they belong to.
+		if (!findRegion(text, block.region)) continue;
 
-		const quoted = slide.text
+		const quoted = block.text
 			.split("\n")
 			.map((line) => `> ${line}`)
 			.join("\n");
-		const result = writeRegion(text, name, quoted);
+		const result = writeRegion(text, block.region, quoted);
 
-		if (result.status === "conflict") conflicted.push(slide.index);
+		if (result.status === "conflict") conflicted.push(block.index);
 		else if (result.status === "updated") {
 			text = result.text;
 			changed = true;
@@ -177,9 +192,32 @@ export async function importDeck(
 		onProgress: (page, total) => options.onProgress?.("extracting", page, total),
 	});
 
-	const slides = buildSlides(extracted.pages.map(toLines));
-	const outline = outlineOf(slides);
-	const stats = summarise(slides);
+	const lines = extracted.pages.map(toLines);
+
+	/*
+	 * A handout is not a deck. Giving every page of a seven-page worksheet its own heading and
+	 * quoting the whole page as a blockquote produces something nobody would read, so prose
+	 * documents are split by their own headings instead. Measured across a real course folder,
+	 * orientation and text density separate the two cleanly.
+	 */
+	const charactersPerPage =
+		lines.reduce((n, page) => n + linesToText(page).length, 0) / Math.max(lines.length, 1);
+	const verdict = classifyShape({
+		sizes: extracted.sizes,
+		charactersPerPage,
+		pageCount: extracted.pageCount,
+	});
+
+	const slides = buildSlides(lines);
+	const sections = verdict.shape === "document" ? buildSections(lines) : [];
+	const outline = verdict.shape === "document" ? { title: outlineDocument(sections).title } : outlineOf(slides);
+	const stats =
+		verdict.shape === "document"
+			? {
+					slideCount: summariseDocument(sections).sectionCount,
+					withText: summariseDocument(sections).withText,
+				}
+			: summarise(slides);
 
 	if (stats.withText === 0) {
 		warnings.push(
@@ -204,7 +242,11 @@ export async function importDeck(
 
 	if (existing instanceof TFile) {
 		const current = await app.vault.read(existing);
-		const { text, changed, conflicted } = updateExisting(current, slides, includeText);
+		const updatable =
+			verdict.shape === "document"
+				? sections.map((s) => ({ index: s.index, text: s.body, region: sectionRegionName(s.index) }))
+				: slides.map((s) => ({ index: s.index, text: s.text, region: slideRegionName(s.index) }));
+		const { text, changed, conflicted } = updateExisting(current, updatable, includeText);
 		if (changed) await app.vault.modify(existing, text);
 
 		if (conflicted.length > 0) {
@@ -215,6 +257,7 @@ export async function importDeck(
 			notePath,
 			deckPath,
 			title,
+			shape: verdict.shape,
 			slideCount: stats.slideCount,
 			status: changed ? "updated" : "unchanged",
 			conflicted,
@@ -232,21 +275,26 @@ export async function importDeck(
 		citekey,
 		title,
 		readerState: "inbox",
-		readerType: "slides",
+		readerType: verdict.shape === "document" ? "document" : "slides",
 		readerSourceId: deckPath,
 		readerSlides: stats.slideCount,
+		readerShape: verdict.reason,
 		readerOrphans: 0,
 		readerDeck: deckPath,
 		readerImported: new Date().toISOString(),
 	});
 
-	const body = buildDeckBody(slides, { deckPath, includeText });
+	const body =
+		verdict.shape === "document"
+			? buildDocumentBody(sections, { documentPath: deckPath, includeText })
+			: buildDeckBody(slides, { deckPath, includeText });
 	await app.vault.create(notePath, `${header}\n# ${title}\n\n![[${deckPath}]]\n\n${body}`);
 
 	return {
 		notePath,
 		deckPath,
 		title,
+		shape: verdict.shape,
 		slideCount: stats.slideCount,
 		status: "created",
 		conflicted: [],

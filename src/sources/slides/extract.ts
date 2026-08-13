@@ -28,6 +28,7 @@ interface PdfTextItem {
 
 interface PdfPage {
 	getTextContent(): Promise<{ items: PdfTextItem[] }>;
+	getViewport(params: { scale: number }): { width: number; height: number };
 	cleanup?(): void;
 }
 
@@ -85,10 +86,17 @@ export interface PdfMetadata {
 	creationDate?: string;
 }
 
+export interface PageSize {
+	width: number;
+	height: number;
+}
+
 export interface ExtractedPdf {
 	pageCount: number;
 	/** One entry per page, in page order. */
 	pages: TextItem[][];
+	/** Page dimensions in PDF units — landscape means slides, portrait means a document. */
+	sizes: PageSize[];
 	metadata: PdfMetadata;
 }
 
@@ -180,6 +188,7 @@ export async function extractPdf(
 		};
 
 		const pages: TextItem[][] = [];
+		const sizes: PageSize[] = [];
 
 		for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
 			if (signal?.aborted) throw new DOMException("Extraction cancelled", "AbortError");
@@ -188,6 +197,13 @@ export async function extractPdf(
 			try {
 				const content = await page.getTextContent();
 				pages.push(toTextItems(content.items));
+				try {
+					const viewport = page.getViewport({ scale: 1 });
+					sizes.push({ width: viewport.width, height: viewport.height });
+				} catch {
+					// Older pdf.js, or an unusual page: shape detection falls back to text density.
+					sizes.push({ width: 0, height: 0 });
+				}
 			} finally {
 				page.cleanup?.();
 			}
@@ -197,7 +213,7 @@ export async function extractPdf(
 			if (pageNumber % chunkSize === 0) await yieldToEventLoop();
 		}
 
-		return { pageCount: document.numPages, pages, metadata };
+		return { pageCount: document.numPages, pages, sizes, metadata };
 	} finally {
 		// Destroying the loading task tears down the document and its worker transport. A
 		// leaked task keeps that transport open. Errors here are swallowed deliberately: a

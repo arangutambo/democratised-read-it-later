@@ -13,7 +13,8 @@
 		"books:dry-run": "esbuild tools/books-dry-run.ts --bundle --platform=node --format=cjs --outfile=.dry-run.cjs --log-level=error && node .dry-run.cjs",
 		"anchor:bench": "esbuild tools/anchor-bench.ts --bundle --platform=node --format=cjs --outfile=.bench.cjs --log-level=error && node .bench.cjs",
 		"slides:dry-run": "esbuild tools/slides-dry-run.ts --bundle --platform=node --format=cjs --outfile=.slides.cjs --log-level=error && node .slides.cjs",
-		"zotero:dry-run": "esbuild tools/zotero-dry-run.ts --bundle --platform=node --format=cjs --outfile=.zot.cjs --log-level=error && node .zot.cjs"
+		"zotero:dry-run": "esbuild tools/zotero-dry-run.ts --bundle --platform=node --format=cjs --outfile=.zot.cjs --log-level=error && node .zot.cjs",
+		"pdf:dry-run": "esbuild tools/pdf-dry-run.ts --bundle --platform=node --format=cjs --outfile=.pdf.cjs --log-level=error && node .pdf.cjs"
 	},
 	"keywords": [],
 	"license": "MIT",

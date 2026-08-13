@@ -73,7 +73,7 @@ export default class ReaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "import-deck-inbox",
-			name: "Import all slide decks from the inbox folder",
+			name: "Import all PDFs from the inbox folder",
 			checkCallback: (checking) => {
 				// Reading a folder outside the vault needs Node.
 				if (!Platform.isDesktopApp || this.settings.deckInboxPath === "") return false;
@@ -181,7 +181,8 @@ export default class ReaderPlugin extends Plugin {
 			});
 
 			for (const warning of result.warnings) this.log.warn(`${result.title}: ${warning}`);
-			notice.setMessage(`Reader: ${result.title} — ${result.slideCount} slides, ${result.status}.`);
+			const unit = result.shape === "document" ? "sections" : "slides";
+			notice.setMessage(`Reader: ${result.title} — ${result.slideCount} ${unit}, ${result.status}.`);
 			window.setTimeout(() => notice.hide(), 8_000);
 		} catch (error) {
 			notice.hide();
@@ -215,6 +216,7 @@ export default class ReaderPlugin extends Plugin {
 			let created = 0;
 			let updated = 0;
 			let unchanged = 0;
+			let documents = 0;
 			const warnings: string[] = [];
 
 			for (const [index, deck] of decks.entries()) {
@@ -224,6 +226,7 @@ export default class ReaderPlugin extends Plugin {
 				if (result.status === "created") created++;
 				else if (result.status === "updated") updated++;
 				else unchanged++;
+				if (result.shape === "document") documents++;
 				for (const warning of result.warnings) warnings.push(`${result.title}: ${warning}`);
 
 				// Let the UI breathe between decks; a 47-page extraction is not instant.
@@ -232,7 +235,8 @@ export default class ReaderPlugin extends Plugin {
 
 			for (const warning of warnings) this.log.warn(warning);
 			notice.setMessage(
-				`Reader: ${decks.length} decks — ${created} new, ${updated} updated, ${unchanged} unchanged.` +
+				`Reader: ${decks.length} PDFs (${decks.length - documents} decks, ${documents} documents) — ` +
+					`${created} new, ${updated} updated, ${unchanged} unchanged.` +
 					(warnings.length > 0 ? ` ${warnings.length} warning(s) in the console.` : ""),
 			);
 			window.setTimeout(() => notice.hide(), 12_000);
