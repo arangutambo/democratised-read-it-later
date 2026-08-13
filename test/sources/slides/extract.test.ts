@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { setPdfJsForTests } from "../../stubs/obsidian";
+
 import { extractPdf, obsidianPdfJs, PdfUnavailableError, type PdfJsLib } from "../../../src/sources/slides/extract";
 import { toLines } from "../../../src/sources/slides/layout";
 import { buildSlides } from "../../../src/sources/slides/structure";
@@ -35,11 +37,20 @@ async function nodePdfJs(): Promise<PdfJsLib> {
 }
 
 describe("obsidianPdfJs", () => {
-	it("reports a usable error when Obsidian's engine is absent", () => {
-		// In Node there is no window.pdfjsLib, which is exactly the shape of the failure a
-		// future Obsidian release would produce.
-		expect(() => obsidianPdfJs()).toThrow(PdfUnavailableError);
-		expect(() => obsidianPdfJs()).toThrow(/window\.pdfjsLib/);
+	it("goes through Obsidian's public loadPdfJs(), not the lazy global", async () => {
+		// window.pdfjsLib does not exist until Obsidian has loaded pdf.js, so reading it
+		// directly failed on a clean start and would have appeared to work for anyone who
+		// had opened a PDF first. loadPdfJs() triggers the load.
+		const fake = { getDocument: () => ({ promise: Promise.resolve({}), destroy: async () => {} }) };
+		setPdfJsForTests(fake);
+
+		await expect(obsidianPdfJs()).resolves.toBe(fake);
+		setPdfJsForTests(undefined);
+	});
+
+	it("reports a usable error when the load yields nothing", async () => {
+		setPdfJsForTests(undefined);
+		await expect(obsidianPdfJs()).rejects.toBeInstanceOf(PdfUnavailableError);
 	});
 });
 

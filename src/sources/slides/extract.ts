@@ -1,18 +1,20 @@
 /**
  * PDF text extraction via Obsidian's own bundled pdf.js.
  *
- * Obsidian exposes `window.pdfjsLib` with its worker already configured — its PDF viewer is
- * pdf.js — so extraction costs no dependency and no bundle growth. That is worth roughly a
- * megabyte compared with shipping `pdfjs-dist` and its worker.
+ * Obsidian's PDF viewer is pdf.js, and it exposes it through the public `loadPdfJs()` API
+ * with the worker already configured. So extraction costs no dependency and no bundle
+ * growth — worth roughly a megabyte against shipping `pdfjs-dist` and its worker.
  *
- * The catch is that this is **not a public API**. It can disappear or change shape between
- * Obsidian releases, so every access is guarded and failure is reported rather than thrown
- * as an unhelpful TypeError. There is no fallback: if it goes, the honest answer is that
- * this Obsidian version cannot be supported until the plugin is updated.
+ * It has to be `loadPdfJs()` rather than `window.pdfjsLib`, because the load is **lazy**:
+ * the global does not exist until something asks for it. Reading it directly failed on a
+ * clean start and would have silently appeared to work for anyone who had opened a PDF
+ * first — the worst kind of bug, since it depends on what the user did earlier.
  *
- * Documents are always destroyed in a `finally`. A leaked PDF document holds its worker
+ * The loading task is always destroyed in a `finally`. A leaked task keeps its worker
  * transport open, which is exactly the class of leak PLAN.md §6 exists to prevent.
  */
+
+import { loadPdfJs } from "obsidian";
 
 import type { TextItem } from "./layout";
 
@@ -53,19 +55,24 @@ export interface PdfJsLib {
 export class PdfUnavailableError extends Error {}
 
 /**
- * Obsidian's bundled pdf.js.
+ * Obsidian's bundled pdf.js, via its public `loadPdfJs()` API.
  *
- * Exported so tests can supply their own implementation instead — `pdfjs-dist` is a
+ * Obsidian loads pdf.js **lazily**: `window.pdfjsLib` does not exist until something has
+ * asked for it, which is why reading the global directly failed on a clean start and would
+ * have appeared to work for anyone who happened to have opened a PDF first. `loadPdfJs()`
+ * triggers the load and resolves to that same object — documented, supported, and correct
+ * whether or not a PDF has been opened this session.
+ *
+ * Exported so tests can supply their own implementation instead: `pdfjs-dist` is a
  * devDependency used only to exercise this adapter against real decks in Node. Production
- * still uses Obsidian's copy and ships no pdf.js of its own.
+ * uses Obsidian's copy and ships no pdf.js of its own.
  */
-export function obsidianPdfJs(): PdfJsLib {
-	const lib = (globalThis as unknown as { window?: { pdfjsLib?: PdfJsLib } }).window?.pdfjsLib;
+export async function obsidianPdfJs(): Promise<PdfJsLib> {
+	const lib = (await loadPdfJs()) as PdfJsLib | undefined;
 	if (!lib || typeof lib.getDocument !== "function") {
 		throw new PdfUnavailableError(
-			"Obsidian's PDF engine could not be reached (window.pdfjsLib). " +
-				"Open any PDF in Obsidian once and try again; if it keeps failing, this Obsidian " +
-				"version may have changed and Reader needs updating.",
+			"Obsidian's PDF engine could not be loaded. This Obsidian version may have changed " +
+				"in a way Reader does not yet handle — please report it with your Obsidian version.",
 		);
 	}
 	return lib;
@@ -132,7 +139,7 @@ export async function extractPdf(
 	options: ExtractOptions = {},
 ): Promise<ExtractedPdf> {
 	const { signal, onProgress, chunkSize = DEFAULT_CHUNK } = options;
-	const pdfjs = options.pdfjs ?? obsidianPdfJs();
+	const pdfjs = options.pdfjs ?? (await obsidianPdfJs());
 
 	/*
 	 * Normalise to a plain Uint8Array.

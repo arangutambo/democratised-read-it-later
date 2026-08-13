@@ -30,6 +30,18 @@ export class App {
 	};
 }
 
+/**
+ * Obsidian loads pdf.js lazily. Returning nothing models a build where the load fails,
+ * which is what the guard in extract.ts exists to report.
+ */
+export let pdfJsForTests: unknown = undefined;
+export function setPdfJsForTests(lib: unknown): void {
+	pdfJsForTests = lib;
+}
+export async function loadPdfJs(): Promise<unknown> {
+	return pdfJsForTests;
+}
+
 export class MarkdownView {}
 export class TFile {}
 export class TFolder {}
