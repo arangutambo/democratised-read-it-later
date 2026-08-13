@@ -54,6 +54,61 @@ describe("obsidianPdfJs", () => {
 	});
 });
 
+describe("input ownership", () => {
+	/**
+	 * pdf.js transfers the buffer it is given to its worker, detaching it in this thread.
+	 * The caller's bytes must therefore never be the bytes pdf.js receives — the deck import
+	 * reads a PDF, extracts it, and then writes those same bytes into the vault, which failed
+	 * with "Cannot perform Construct on a detached ArrayBuffer".
+	 *
+	 * A fake pdf.js is used deliberately: the real one only detaches when a worker is
+	 * actually involved, so a test against pdfjs-dist in Node would pass either way. This
+	 * asserts the invariant itself rather than one runtime's symptom of breaking it.
+	 */
+	function recordingPdfJs(seen: { data: ArrayBuffer | Uint8Array }[]): PdfJsLib {
+		return {
+			getDocument(source: { data: ArrayBuffer | Uint8Array }) {
+				seen.push(source);
+				return {
+					promise: Promise.resolve({
+						numPages: 0,
+						getPage: () => Promise.reject(new Error("unused")),
+						getMetadata: () => Promise.resolve({ info: {} }),
+					}),
+					destroy: async () => {},
+				};
+			},
+		} as unknown as PdfJsLib;
+	}
+
+	it("never hands pdf.js the caller's ArrayBuffer", async () => {
+		const input = new ArrayBuffer(64);
+		const seen: { data: ArrayBuffer | Uint8Array }[] = [];
+
+		await extractPdf(input, { pdfjs: recordingPdfJs(seen) });
+
+		const given = seen[0].data as Uint8Array;
+		expect(given.buffer).not.toBe(input);
+		expect(given.byteLength).toBe(64);
+	});
+
+	it("never hands pdf.js the caller's typed array buffer", async () => {
+		const input = new Uint8Array(64);
+		const seen: { data: ArrayBuffer | Uint8Array }[] = [];
+
+		await extractPdf(input, { pdfjs: recordingPdfJs(seen) });
+
+		expect((seen[0].data as Uint8Array).buffer).not.toBe(input.buffer);
+	});
+
+	it("leaves the caller's bytes readable afterwards", async () => {
+		const input = new Uint8Array([1, 2, 3, 4]);
+		await extractPdf(input, { pdfjs: recordingPdfJs([]) });
+
+		expect(Array.from(input)).toEqual([1, 2, 3, 4]);
+	});
+});
+
 withDeck("extractPdf against a real lecture deck", () => {
 	it("extracts every page", async () => {
 		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });

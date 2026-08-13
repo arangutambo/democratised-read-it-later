@@ -142,14 +142,26 @@ export async function extractPdf(
 	const pdfjs = options.pdfjs ?? (await obsidianPdfJs());
 
 	/*
-	 * Normalise to a plain Uint8Array.
+	 * Hand pdf.js a private copy it is free to destroy.
 	 *
-	 * pdf.js rejects a Node `Buffer` outright — "Please provide binary data as `Uint8Array`,
-	 * rather than `Buffer`" — even though Buffer extends Uint8Array, because a pooled Buffer
-	 * can be a view into a much larger allocation. Obsidian hands over an ArrayBuffer so this
-	 * never bites in production, but a function that accepts bytes should accept bytes.
+	 * pdf.js **transfers** the buffer to its worker thread, which detaches it in this one.
+	 * Anything the caller still holds a reference to becomes unusable — the deck import read
+	 * a PDF, extracted it, then tried to write the same bytes into the vault and got
+	 * "Cannot perform Construct on a detached ArrayBuffer" from Obsidian's `Buffer.from`.
+	 *
+	 * Neither obvious shorthand is safe here:
+	 *
+	 *   `new Uint8Array(x)`  copies a typed array but only *views* an ArrayBuffer — which is
+	 *                        how our caller's own memory reached the worker.
+	 *   `x.slice()`          gives a fresh buffer for a Uint8Array, but `Buffer.prototype.slice`
+	 *                        is an alias of `subarray`: it returns another Buffer over the same
+	 *                        memory, and pdf.js rejects a Buffer outright.
+	 *
+	 * Written longhand, this yields a plain Uint8Array owning fresh memory whatever went in.
 	 */
-	const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new Uint8Array(data);
+	const view = data instanceof Uint8Array ? data : new Uint8Array(data);
+	const bytes = new Uint8Array(view.byteLength);
+	bytes.set(view);
 
 	// `isEvalSupported: false` keeps pdf.js from compiling font programs with eval, which a
 	// stricter Obsidian content-security policy would refuse anyway.
