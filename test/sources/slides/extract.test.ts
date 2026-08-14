@@ -23,19 +23,32 @@ import { buildSlides } from "../../../src/sources/slides/structure";
  */
 
 /**
- * Candidate homes for the fixture deck, most durable first. The vault copy is written by the
- * importer and stays put; a downloads folder is transient, and pointing the tests there once
- * meant they silently began skipping the moment the file was tidied away.
+ * The assertions below are about *this* deck — 19 pages, a known title slide, 17 headings
+ * that Poppler independently agrees with — so any PDF will not do.
+ *
+ * These tests must not fail a contributor's build, so a missing fixture skips. But a skipped
+ * test that reports green is how this suite quietly stopped exercising the extractor at all
+ * when the deck was tidied into the vault's trash. So the skip now says so, loudly, and
+ * `READER_TEST_DECK` points at the file wherever it has ended up.
  */
 const DECK_NAME = "BINF7001_2026_WEEK1_IntroductoryLecture.pdf";
 const CANDIDATES = [
+	process.env.READER_TEST_DECK,
 	path.join(process.env.HOME ?? "", "Documents", "🧠 Second Brain", "Sources", "_decks", DECK_NAME),
+	path.join(process.env.HOME ?? "", "Documents", "🧠 Second Brain", ".trash", "Sources", "_decks", DECK_NAME),
 	path.join(process.env.HOME ?? "", "Downloads", DECK_NAME),
-];
+].filter((c): c is string => typeof c === "string" && c !== "");
 
-const REAL_DECK = CANDIDATES.find((candidate) => existsSync(candidate)) ?? CANDIDATES[0];
-const hasRealDeck = existsSync(REAL_DECK);
+const REAL_DECK = CANDIDATES.find((candidate) => existsSync(candidate));
+const hasRealDeck = REAL_DECK !== undefined;
 const withDeck = hasRealDeck ? describe : describe.skip;
+
+if (!hasRealDeck) {
+	console.warn(
+		`\n  ⚠  ${DECK_NAME} not found — the real-deck extraction tests are SKIPPED.\n` +
+			`     Set READER_TEST_DECK=/path/to/the/deck.pdf to run them.\n`,
+	);
+}
 
 async function nodePdfJs(): Promise<PdfJsLib> {
 	// The legacy build is the one that runs outside a browser.
@@ -117,7 +130,7 @@ describe("input ownership", () => {
 
 withDeck("extractPdf against a real lecture deck", () => {
 	it("extracts every page", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 
 		expect(result.pageCount).toBe(19);
 		expect(result.pages).toHaveLength(19);
@@ -126,11 +139,11 @@ withDeck("extractPdf against a real lecture deck", () => {
 	it("cleans up without throwing, on the pdf.js the tests run against", async () => {
 		// The bug this pins: PDFDocumentProxy.destroy() is gone by pdf.js v6, and calling it
 		// in a finally block throws a TypeError that replaces the real return value.
-		await expect(extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() })).resolves.toBeDefined();
+		await expect(extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() })).resolves.toBeDefined();
 	});
 
 	it("produces items the layout code can turn back into readable lines", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 		const lines = toLines(result.pages[0]);
 
 		// The real title slide, with the words actually separated.
@@ -140,7 +153,7 @@ withDeck("extractPdf against a real lecture deck", () => {
 	});
 
 	it("reads coordinates in PDF orientation, so lines come out top-first", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 		const lines = toLines(result.pages[0]);
 
 		const ys = lines.map((l) => l.y);
@@ -148,14 +161,14 @@ withDeck("extractPdf against a real lecture deck", () => {
 	});
 
 	it("carries font size through, which is what title detection depends on", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 		const lines = toLines(result.pages[0]);
 
 		expect(lines[0].size).toBeGreaterThan(lines[lines.length - 1].size);
 	});
 
 	it("feeds structure detection well enough to find the title slide", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 		const slides = buildSlides(result.pages.map(toLines));
 
 		expect(slides[0].kind).toBe("title");
@@ -167,7 +180,7 @@ withDeck("extractPdf against a real lecture deck", () => {
 
 	it("reports progress and can be cancelled", async () => {
 		const seen: number[] = [];
-		await extractPdf(readFileSync(REAL_DECK), {
+		await extractPdf(readFileSync(REAL_DECK as string), {
 			pdfjs: await nodePdfJs(),
 			onProgress: (page) => seen.push(page),
 		});
@@ -176,12 +189,12 @@ withDeck("extractPdf against a real lecture deck", () => {
 		const controller = new AbortController();
 		controller.abort();
 		await expect(
-			extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs(), signal: controller.signal }),
+			extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs(), signal: controller.signal }),
 		).rejects.toThrow();
 	});
 
 	it("reads document metadata", async () => {
-		const result = await extractPdf(readFileSync(REAL_DECK), { pdfjs: await nodePdfJs() });
+		const result = await extractPdf(readFileSync(REAL_DECK as string), { pdfjs: await nodePdfJs() });
 		expect(result.metadata.title).toContain("BINF7001");
 	});
 });
