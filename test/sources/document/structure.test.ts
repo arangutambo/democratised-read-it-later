@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { Line } from "../../../src/sources/slides/layout";
 import { buildSections, outlineOf } from "../../../src/sources/document/structure";
-import { buildDocumentBody, summarise } from "../../../src/sources/document/note";
 import { classifyShape } from "../../../src/sources/pdf/shape";
 
 /** Lines with explicit y positions, so vertical spacing is part of the fixture. */
@@ -140,50 +139,7 @@ describe("buildSections", () => {
 	});
 });
 
-describe("buildDocumentBody", () => {
-	const sections = buildSections([
-		page([
-			["Introduction", 16, 700],
-			["Body text here for the section.", 11, 680],
-		]),
-	]);
-
-	it("links to the page rather than embedding it", () => {
-		// A handout's page is not a unit of meaning; twenty page images through a worksheet
-		// would bury the prose.
-		const body = buildDocumentBody(sections, { documentPath: "Sources/_decks/w3.pdf" });
-		expect(body).toContain("#page=1)");
-		expect(body).not.toContain("![[");
-	});
-
-	it("puts each section's text in its own managed region", () => {
-		const body = buildDocumentBody(sections, { documentPath: "d.pdf" });
-		expect(body).toContain("%% reader:begin section-1 hash=");
-	});
-
-	it("renders headings at a depth reflecting their size", () => {
-		const body = buildDocumentBody(sections, { documentPath: "d.pdf" });
-		expect(body).toContain("## Introduction");
-	});
-
-	it("leaves room to write between sections", () => {
-		const two = buildSections([
-			page([
-				["Introduction", 16, 700],
-				["Body text here for the section.", 11, 680],
-				["Methods", 16, 640],
-				["More body text explaining the method.", 11, 620],
-			]),
-		]);
-		const body = buildDocumentBody(two, { documentPath: "d.pdf" });
-
-		// A blank run between the end of one section and the next heading is where the
-		// reader writes — the entire point of the scaffold.
-		expect(body).toMatch(/#page=1\)\n\n\n## Methods/);
-	});
-});
-
-describe("outlineOf and summarise", () => {
+describe("outlineOf", () => {
 	it("reports the first heading as the document title", () => {
 		const sections = buildSections([
 			page([
@@ -192,6 +148,5 @@ describe("outlineOf and summarise", () => {
 			]),
 		]);
 		expect(outlineOf(sections).title).toBe("Week 3: Pattern matching");
-		expect(summarise(sections).headings).toBe(1);
 	});
 });

@@ -143,6 +143,67 @@ describe("migrateSettings", () => {
 			expect(notes.join(" ")).toMatch(/no migration from schema 1/i);
 		});
 
+		describe("v1 → v2, the Reader pivot", () => {
+			/** data.json as v1 actually wrote it, taken from a real installed plugin. */
+			const v1 = {
+				schemaVersion: 1,
+				features: {
+					readerSkin: true,
+					booksImport: true,
+					pdfImport: false,
+					slidesImport: true,
+					webClip: false,
+					zotero: true,
+					ai: false,
+				},
+				sourcesFolder: "Sources",
+				decksFolder: "Sources/_decks",
+				deckInboxPath: "/Users/someone/Downloads",
+			};
+
+			it("carries slide import over to the reader rather than defaulting it", () => {
+				// Someone who had slide import on wanted PDFs in their vault; the Reader view is
+				// what now serves that. Defaulting instead would silently switch it off for them.
+				expect(migrateSettings(v1).settings.features.reader).toBe(true);
+			});
+
+			it("does not opt someone back in who had switched it off", () => {
+				const off = { ...v1, features: { ...v1.features, slidesImport: false } };
+				expect(migrateSettings(off).settings.features.reader).toBe(false);
+			});
+
+			it("drops the flags for subsystems that no longer exist", () => {
+				const { settings } = migrateSettings(v1);
+				expect(settings.features).not.toHaveProperty("slidesImport");
+				expect(settings.features).not.toHaveProperty("pdfImport");
+				expect(settings).not.toHaveProperty("deckInboxPath");
+			});
+
+			it("keeps the rest of the settings untouched", () => {
+				const { settings } = migrateSettings(v1);
+				expect(settings.sourcesFolder).toBe("Sources");
+				expect(settings.decksFolder).toBe("Sources/_decks");
+				expect(settings.features.zotero).toBe(true);
+			});
+
+			it("gives clips a resolution and clamps absurd ones", () => {
+				expect(migrateSettings(v1).settings.clipDpi).toBe(150);
+				expect(migrateSettings({ ...v1, clipDpi: 5 }).settings.clipDpi).toBe(72);
+				expect(migrateSettings({ ...v1, clipDpi: 5000 }).settings.clipDpi).toBe(600);
+				expect(migrateSettings({ ...v1, clipDpi: 220.7 }).settings.clipDpi).toBe(221);
+			});
+
+			it("is idempotent — migrating twice changes nothing the second time", () => {
+				// Settings are written back when `changed`, so a migration that never settles
+				// would rewrite data.json on every load and churn Obsidian Sync forever.
+				const once = migrateSettings(v1).settings;
+				const twice = migrateSettings(once as unknown as Record<string, unknown>);
+
+				expect(twice.settings).toEqual(once);
+				expect(twice.changed).toBe(false);
+			});
+		});
+
 		it("preserves fields written by a newer version instead of destroying them", () => {
 			// Two devices, one ahead of the other, sharing data.json via Obsidian Sync.
 			const fromNewerBuild = {

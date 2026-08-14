@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { Line } from "../../../src/sources/slides/layout";
 import { buildSlides, classify, deckTitleOf, detectTitle, outlineOf } from "../../../src/sources/slides/structure";
-import { buildDeckBody, summarise } from "../../../src/sources/slides/note";
 
 function lines(...entries: ([string] | [string, number])[]): Line[] {
 	return entries.map(([text, size], i) => ({ text, size: size ?? 10, y: 500 - i * 20 }));
@@ -101,60 +100,5 @@ describe("outlineOf", () => {
 		expect(outline.counts.title).toBe(1);
 		expect(outline.counts.summary).toBe(1);
 		expect(outline.title).toContain("BINF7001");
-	});
-});
-
-describe("buildDeckBody", () => {
-	const slides = buildSlides([REAL_TITLE_SLIDE, lines(["Course structure", 20], ["• one"], ["• two"])]);
-
-	it("embeds each slide as a PDF page rather than an extracted image", () => {
-		// 322 pages of PNGs into a vault already carrying 2.4 GB of images is the wrong trade.
-		const body = buildDeckBody(slides, { deckPath: "Slides/BINF7001.pdf" });
-		expect(body).toContain("![[Slides/BINF7001.pdf#page=1]]");
-		expect(body).toContain("![[Slides/BINF7001.pdf#page=2]]");
-	});
-
-	it("puts each slide's text in its own managed region", () => {
-		const body = buildDeckBody(slides, { deckPath: "d.pdf" });
-		expect(body).toContain("%% reader:begin slide-1 hash=");
-		expect(body).toContain("%% reader:end slide-2 %%");
-	});
-
-	it("quotes the deck's words so they read as the source, not the reader's", () => {
-		const body = buildDeckBody(slides, { deckPath: "d.pdf" });
-		expect(body).toContain("> Course structure");
-	});
-
-	it("leaves room to write under every slide", () => {
-		// The whole point per DESIGN.md §7: a scaffold, not a transcript.
-		const body = buildDeckBody(slides, { deckPath: "d.pdf" });
-		const afterRegion = body.split("%% reader:end slide-1 %%")[1];
-		expect(afterRegion.startsWith("\n\n")).toBe(true);
-	});
-
-	it("gives sections a shallower heading than content, so the outline has shape", () => {
-		const structured = buildSlides([lines(["Learning objectives", 20]), lines(["Detail", 20], ["body"])]);
-		const body = buildDeckBody(structured, { deckPath: "d.pdf" });
-
-		expect(body).toContain("## 1. Learning objectives");
-		expect(body).toContain("### 2. Detail");
-	});
-
-	it("can omit the extracted text entirely", () => {
-		const body = buildDeckBody(slides, { deckPath: "d.pdf", includeText: false });
-		expect(body).not.toContain("reader:begin");
-		expect(body).toContain("![[d.pdf#page=1]]");
-	});
-
-	it("skips blank slides by default", () => {
-		const withBlank = buildSlides([lines(["Real", 20], ["content here"]), []]);
-		expect(buildDeckBody(withBlank, { deckPath: "d.pdf" })).not.toContain("#page=2");
-	});
-});
-
-describe("summarise", () => {
-	it("reports what the deck contains", () => {
-		const slides = buildSlides([REAL_TITLE_SLIDE, lines(["Learning objectives", 20]), []]);
-		expect(summarise(slides)).toMatchObject({ slideCount: 3, blanks: 1 });
 	});
 });

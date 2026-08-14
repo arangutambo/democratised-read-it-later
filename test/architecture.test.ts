@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -15,10 +15,26 @@ import { describe, expect, it } from "vitest";
 const SRC = path.resolve(__dirname, "../src");
 
 /** Layers that must stay free of any Obsidian dependency. */
-const PURE_DIRS = ["core", "anchor", "template", "transport"];
+const PURE_DIRS = ["core", "anchor", "template", "transport", "capture"];
 
 /** Within source adapters, only row-mapping is pure; `db.ts` may touch the vault APIs. */
 const PURE_ADAPTER_FILES = ["map.ts"];
+
+/**
+ * Individually pure files inside layers that are otherwise allowed to touch Obsidian.
+ *
+ * `reader/` renders into a live view and must import `obsidian`, but its model, its memory
+ * budget and its rect maths are where the risk actually is — and none of that needs a running
+ * app to be correct. Keeping these four testable in plain Node is what stops the riskiest
+ * code in v2 from being verifiable only by opening Obsidian and squinting.
+ */
+const PURE_FILES = [
+	"note/bullet.ts",
+	"reader/document.ts",
+	"reader/surface/surface.ts",
+	"reader/render/virtualiser.ts",
+	"reader/gesture/region.ts",
+];
 
 function walk(dir: string): string[] {
 	let out: string[] = [];
@@ -41,7 +57,8 @@ function pureFiles(): string[] {
 	const adapters = walk(path.join(SRC, "sources")).filter((f) =>
 		PURE_ADAPTER_FILES.includes(path.basename(f)),
 	);
-	return [...files, ...adapters];
+	const named = PURE_FILES.map((rel) => path.join(SRC, rel)).filter((f) => existsSync(f));
+	return [...files, ...adapters, ...named];
 }
 
 const IMPORTS_OBSIDIAN = /(?:from\s+["']obsidian["']|require\(\s*["']obsidian["']\s*\))/;

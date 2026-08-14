@@ -1,7 +1,7 @@
 import type { LogLevel } from "../core/log";
 
 /** Bump when the shape below changes, and add a migration in `migrate.ts`. */
-export const SETTINGS_SCHEMA_VERSION = 1;
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 /**
  * A highlight colour and what it means.
@@ -28,10 +28,10 @@ export interface HighlightColour {
 }
 
 export interface FeatureFlags {
+	/** The Reader view itself: opening documents and clipping from them. */
+	reader: boolean;
 	readerSkin: boolean;
 	booksImport: boolean;
-	pdfImport: boolean;
-	slidesImport: boolean;
 	webClip: boolean;
 	zotero: boolean;
 	ai: boolean;
@@ -41,13 +41,19 @@ export type FeatureKey = keyof FeatureFlags;
 
 /** Subsystems that actually exist. Everything else is scaffolding for a later milestone. */
 export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>([
+	"reader",
 	"readerSkin",
 	"booksImport",
-	"slidesImport",
 	"zotero",
 ]);
 
 export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: string }> = {
+	reader: {
+		name: "Reader",
+		description:
+			"Read documents in Obsidian and clip from them — a passage becomes a quote, a dragged " +
+			"box becomes an image, and you write underneath in the note beside it.",
+	},
 	readerSkin: {
 		name: "Reader skin",
 		description: "Render notes marked `reader: true` in a reading layout.",
@@ -55,16 +61,6 @@ export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: str
 	booksImport: {
 		name: "Apple Books import",
 		description: "Import highlights and notes from Apple Books. Desktop only.",
-	},
-	pdfImport: {
-		name: "PDF import",
-		description: "Extract text and annotations from PDFs in your library.",
-	},
-	slidesImport: {
-		name: "Slides import",
-		description:
-			"Turn lecture slide decks into study notes — one heading per slide, the slide embedded, " +
-			"and room to write under each one.",
 	},
 	webClip: {
 		name: "Web clipping",
@@ -90,18 +86,21 @@ export interface ReaderSettings {
 	/** Vault-relative folder for cited images. Only assets you actually reference land here. */
 	assetsFolder: string;
 	/**
-	 * Vault-relative folder that imported slide decks are copied into.
+	 * Vault-relative folder documents are copied into when they arrive from outside.
 	 *
-	 * Decks live inside the vault deliberately: `![[deck.pdf#page=3]]` only resolves for a
-	 * file Obsidian can see, and embedding the real slide is what makes the note worth
-	 * opening. A semester of decks is tens of megabytes; books and video stay outside.
+	 * Reader renders PDFs itself rather than relying on Obsidian's viewer, so a document no
+	 * longer has to be inside the vault to be readable. This is a default home, not a
+	 * requirement.
 	 */
 	decksFolder: string;
 	/**
-	 * Absolute path to a folder outside the vault holding decks waiting to be imported —
-	 * typically a downloads folder. Blank disables the bulk import command.
+	 * Resolution for clipped regions and pages, in DPI.
+	 *
+	 * 150 puts a region at roughly 80–250 KB and a full page at 200–450 KB, in line with the
+	 * PNGs already in a typical vault. Lower saves space at the cost of small type in dense
+	 * slides being unreadable when you zoom, which defeats the purpose of clipping it.
 	 */
-	deckInboxPath: string;
+	clipDpi: number;
 	/** Zotero's data directory. Blank uses ~/Zotero. */
 	zoteroDataDir: string;
 	/**
@@ -123,10 +122,9 @@ export interface ReaderSettings {
 export const DEFAULT_SETTINGS: ReaderSettings = {
 	schemaVersion: SETTINGS_SCHEMA_VERSION,
 	features: {
+		reader: true,
 		readerSkin: true,
 		booksImport: true,
-		pdfImport: false,
-		slidesImport: true,
 		webClip: false,
 		zotero: true,
 		ai: false,
@@ -134,7 +132,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	sourcesFolder: "Sources",
 	assetsFolder: "Sources/_assets",
 	decksFolder: "Sources/_decks",
-	deckInboxPath: "",
+	clipDpi: 150,
 	zoteroDataDir: "",
 	libraryPath: "",
 	progressFile: "Sources/.reader-progress.json",

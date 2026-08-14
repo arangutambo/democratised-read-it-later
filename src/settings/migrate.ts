@@ -27,8 +27,32 @@ export type RawSettings = Record<string, unknown>;
 /** Transforms data written by schema version N into schema version N+1. */
 export type Migration = (data: RawSettings) => RawSettings;
 
-/** Keyed by the version being migrated *from*. Empty at v1; the mechanism is under test. */
-export const MIGRATIONS: Readonly<Record<number, Migration>> = {};
+/**
+ * Schema 1 → 2. The v2 pivot: bulk PDF extraction was removed and replaced by the Reader
+ * view, so the flags that gated it no longer describe anything that exists.
+ *
+ * `slidesImport` carries over to `reader` rather than defaulting: someone who had slide
+ * import switched on wanted PDFs in their vault, and the Reader view is what now serves
+ * that. Someone who had switched it off is not opted back in.
+ */
+const migrateV1toV2: Migration = (data) => {
+	const features = isPlainObject(data.features) ? { ...data.features } : {};
+	const hadSlides = typeof features.slidesImport === "boolean" ? features.slidesImport : true;
+
+	features.reader = typeof features.reader === "boolean" ? features.reader : hadSlides;
+	delete features.slidesImport;
+	delete features.pdfImport;
+
+	const next: RawSettings = { ...data, features };
+	// The bulk inbox import is gone; the path it pointed at has nothing to configure.
+	delete next.deckInboxPath;
+	return next;
+};
+
+/** Keyed by the version being migrated *from*. */
+export const MIGRATIONS: Readonly<Record<number, Migration>> = {
+	1: migrateV1toV2,
+};
 
 export interface MigrationResult {
 	settings: ReaderSettings;
@@ -169,7 +193,8 @@ export function migrateSettings(
 		sourcesFolder: asString(data.sourcesFolder, DEFAULT_SETTINGS.sourcesFolder),
 		assetsFolder: asString(data.assetsFolder, DEFAULT_SETTINGS.assetsFolder),
 		decksFolder: asString(data.decksFolder, DEFAULT_SETTINGS.decksFolder),
-		deckInboxPath: asString(data.deckInboxPath, DEFAULT_SETTINGS.deckInboxPath),
+		// 72 is a screen-resolution page and 600 is a 30 MB clip; both ends are user error.
+		clipDpi: Math.round(asNumberInRange(data.clipDpi, DEFAULT_SETTINGS.clipDpi, 72, 600)),
 		zoteroDataDir: asString(data.zoteroDataDir, DEFAULT_SETTINGS.zoteroDataDir),
 		libraryPath: asString(data.libraryPath, DEFAULT_SETTINGS.libraryPath),
 		progressFile: asString(data.progressFile, DEFAULT_SETTINGS.progressFile),

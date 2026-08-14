@@ -79,17 +79,20 @@ export class ReaderSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
-			.setName("Slide deck inbox")
+			.setName("Clip resolution")
 			.setDesc(
-				"Absolute path to a folder outside the vault holding decks to import in bulk — " +
-					"a downloads folder, say. Leave blank to import decks one at a time instead.",
+				"Resolution for clipped regions and pages, in DPI. 150 keeps small type in dense " +
+					"slides readable when you zoom, at roughly 80–250 KB a region. Lower saves space; " +
+					"a clip you cannot read is not worth keeping.",
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("/Users/you/Downloads")
-					.setValue(this.plugin.settings.deckInboxPath)
+					.setPlaceholder("150")
+					.setValue(String(this.plugin.settings.clipDpi))
 					.onChange((value) => {
-						this.plugin.settings.deckInboxPath = value.trim();
+						const dpi = Number.parseInt(value, 10);
+						if (!Number.isFinite(dpi)) return;
+						this.plugin.settings.clipDpi = Math.min(600, Math.max(72, dpi));
 						this.save();
 					}),
 			);
