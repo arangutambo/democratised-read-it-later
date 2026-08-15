@@ -1,0 +1,134 @@
+/*
+ * The Reader view.
+ *
+ * The stacking order in `.reader-page` is load-bearing: canvas, then marks, then a
+ * transparent text layer on top. The marks must not receive pointer events or they eat the
+ * selection; the text layer must be topmost or the browser hit-tests the canvas and there is
+ * nothing to select.
+ */
+
+.reader-view {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	outline: none;
+}
+
+.reader-scroller {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: auto;
+	padding: var(--size-4-4);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--size-4-4);
+	background-color: var(--background-secondary);
+}
+
+.reader-scroller.is-arming-region {
+	cursor: crosshair;
+}
+
+/* While a box is being drawn, text must not select underneath it. */
+.reader-scroller.is-arming-region .reader-page-text {
+	pointer-events: none;
+	user-select: none;
+}
+
+.reader-page {
+	position: relative;
+	flex: 0 0 auto;
+	width: 100%;
+	max-width: 100%;
+	background-color: var(--background-primary);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.reader-page-canvas canvas {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.reader-page-overlay {
+	position: absolute;
+	inset: 0;
+	/* Marks are decoration. Taking pointer events here would break text selection. */
+	pointer-events: none;
+}
+
+.reader-mark {
+	position: absolute;
+	background-color: var(--text-highlight-bg);
+	mix-blend-mode: multiply;
+	border-radius: 2px;
+}
+
+.reader-page-text {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	line-height: 1;
+	/*
+	 * Transparent rather than absent: selection, copy, double-click-to-select-word and
+	 * shift-click all come from the browser this way, instead of being reimplemented over a
+	 * canvas.
+	 */
+	color: transparent;
+	user-select: text;
+}
+
+.reader-page-text span {
+	position: absolute;
+	white-space: pre;
+	transform-origin: 0 0;
+	cursor: text;
+}
+
+.reader-page-text ::selection {
+	background-color: var(--text-selection);
+}
+
+.reader-marquee {
+	position: absolute;
+	border: 1px dashed var(--interactive-accent);
+	background-color: var(--interactive-accent);
+	opacity: 0.18;
+	pointer-events: none;
+}
+
+.reader-status {
+	flex: 0 0 auto;
+	padding: var(--size-2-3) var(--size-4-4);
+	border-top: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-error {
+	max-width: 40em;
+	margin: var(--size-4-8) auto;
+	padding: var(--size-4-4);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	color: var(--text-error);
+}
+
+/*
+ * Hide our block ids in Live Preview.
+ *
+ * `^hl-01k9…` has to stay in the file — `![[Note#^hl-01k9…]]` is how a single clip gets
+ * pulled into an essay, which is the point of the whole system. But it is machinery, and the
+ * note is meant to read as something you wrote. Obsidian tags block ids `cm-blockid` in Live
+ * Preview (verified in 1.13.7) and hides them in Reading view already.
+ *
+ * Only ours are hidden: a block id the user typed themselves is theirs to see.
+ */
+.markdown-source-view.mod-cm6 .cm-blockid:not(.cm-active .cm-blockid) {
+	font-size: 0;
+}
+
+.markdown-source-view.mod-cm6 .cm-blockid:not(.cm-active .cm-blockid)::before {
+	content: "";
+}

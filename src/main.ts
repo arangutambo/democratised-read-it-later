@@ -1,7 +1,9 @@
-import { MarkdownView, Notice, Platform, Plugin } from "obsidian";
+import { MarkdownView, Notice, Platform, Plugin, TFile } from "obsidian";
 
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
+import { isReadable } from "./reader/open";
+import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
 import { readerSkin } from "./render/reader-skin";
 import { collectQueue, ensureQueueBase } from "./review/queue";
 import { migrateSettings } from "./settings/migrate";
@@ -42,6 +44,8 @@ export default class ReaderPlugin extends Plugin {
 			if (!this.settings.features.readerSkin) return;
 			readerSkin(el, ctx);
 		});
+
+		this.setUpReader();
 
 		this.addCommand({
 			id: "toggle-reader",
@@ -90,6 +94,75 @@ export default class ReaderPlugin extends Plugin {
 			this.log.error(`teardown failed for "${name}":`, error);
 		}
 		this.log.info("unloaded");
+	}
+
+	/**
+	 * The Reader view, its file type, and the one gesture that creates a document.
+	 *
+	 * `.reader` is registered rather than `.pdf`: core already owns `pdf`, and
+	 * `registerExtensions` throws for an extension that is taken. See `reader/open.ts`.
+	 */
+	private setUpReader(): void {
+		if (!this.settings.features.reader) return;
+
+		this.registerView(
+			READER_VIEW_TYPE,
+			(leaf) =>
+				new ReaderView(leaf, {
+					clipDpi: this.settings.clipDpi,
+					assetsFolder: this.settings.assetsFolder,
+					// A rendered page is 10–15 MB of canvas. Mobile gets the floor, where memory
+					// is the binding limit and a 315-page workbook is otherwise a dead tab.
+					pageBudget: Platform.isMobile ? 3 : 5,
+					log: this.log,
+				}),
+		);
+
+		this.registerExtensions(["reader"], READER_VIEW_TYPE);
+
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu, file) => {
+				if (!(file instanceof TFile) || !isReadable(file)) return;
+				menu.addItem((item) =>
+					item
+						.setTitle("Open in Reader")
+						.setIcon("book-open")
+						.onClick(() => void this.openInReader(file)),
+				);
+			}),
+		);
+
+		this.addCommand({
+			id: "open-in-reader",
+			name: "Open this PDF in Reader",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || !isReadable(file)) return false;
+				if (!checking) void this.openInReader(file);
+				return true;
+			},
+		});
+	}
+
+	/** Create the `.reader` + `.md` pair for a PDF and open it. */
+	private async openInReader(file: TFile): Promise<void> {
+		try {
+			const { ensurePair } = await import("./reader/open");
+			const pair = await ensurePair(
+				this.app,
+				{ path: file.path, basename: file.basename, kind: "pdf" },
+				this.settings.sourcesFolder,
+			);
+
+			const readerFile = this.app.vault.getFileByPath(pair.readerPath);
+			if (!readerFile) throw new Error(`${pair.readerPath} could not be opened.`);
+
+			await this.app.workspace.getLeaf(false).openFile(readerFile);
+		} catch (error) {
+			this.log.error("could not open the document in Reader", error);
+			const message = error instanceof Error ? error.message : "Could not open that document.";
+			new Notice(`Reader: ${message}`, 10_000);
+		}
 	}
 
 	/** Maps a raw source colour key such as `books:3` onto the user's own meaning for it. */

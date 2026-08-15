@@ -127,3 +127,48 @@ describe("ReaderPlugin lifecycle", () => {
 		expect(saved[0]).toMatchObject({ sourcesFolder: "Reading", logLevel: "debug" });
 	});
 });
+
+describe("Reader view registration", () => {
+	it("registers the view and claims the .reader extension", async () => {
+		const { plugin, stub } = makePlugin(null);
+		await plugin.onload();
+
+		expect(stub.views.has("reader-document")).toBe(true);
+		expect(stub.extensions.get("reader")).toBe("reader-document");
+	});
+
+	it("never claims .pdf, which core already owns", async () => {
+		/*
+		 * ViewRegistry.registerExtensions throws outright for an extension that is taken:
+		 *
+		 *   if (n.hasOwnProperty(o)) throw new Error('Attempting to register an existing …')
+		 *
+		 * Releasing `pdf` first needs app.viewRegistry.unregisterExtensions, which is not in
+		 * the public typings. Writing our own renderer to avoid internals and then using
+		 * internals to launch it would be a poor trade, so the entry point is a menu item and
+		 * the .reader file it leaves behind.
+		 */
+		const { plugin, stub } = makePlugin(null);
+		await plugin.onload();
+
+		expect(stub.extensions.has("pdf")).toBe(false);
+	});
+
+	it("offers Open in Reader as a command", async () => {
+		const { plugin, stub } = makePlugin(null);
+		await plugin.onload();
+
+		expect(stub.commands.map((c) => c.id)).toContain("open-in-reader");
+	});
+
+	it("registers nothing when the reader feature is switched off", async () => {
+		const { plugin, stub } = makePlugin({
+			schemaVersion: 2,
+			features: { reader: false },
+		});
+		await plugin.onload();
+
+		expect(stub.views.size).toBe(0);
+		expect(stub.extensions.size).toBe(0);
+	});
+});

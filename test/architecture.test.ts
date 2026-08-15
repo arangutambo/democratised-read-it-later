@@ -57,7 +57,7 @@ function pureFiles(): string[] {
 	const adapters = walk(path.join(SRC, "sources")).filter((f) =>
 		PURE_ADAPTER_FILES.includes(path.basename(f)),
 	);
-	const named = PURE_FILES.map((rel) => path.join(SRC, rel)).filter((f) => existsSync(f));
+	const named = PURE_FILES.map((rel) => path.join(SRC, rel));
 	return [...files, ...adapters, ...named];
 }
 
@@ -114,5 +114,13 @@ describe("architecture", () => {
 	it("is actually scanning files, not passing vacuously", () => {
 		// A rename that empties PURE_DIRS would otherwise make the test above meaningless.
 		expect(pureFiles().length).toBeGreaterThan(0);
+	});
+
+	it("every file named in PURE_FILES exists", () => {
+		// The named list is the half of the rule a rename can silently disable: a moved file
+		// simply stops being scanned, and the suite still reports green. Assert them present
+		// rather than skipping the missing ones.
+		const missing = PURE_FILES.filter((rel) => !existsSync(path.join(SRC, rel)));
+		expect(missing).toEqual([]);
 	});
 });

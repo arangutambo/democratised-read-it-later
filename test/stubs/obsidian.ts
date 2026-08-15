@@ -10,9 +10,13 @@ export class App {
 	workspace = {
 		getActiveViewOfType: (): unknown => null,
 		getActiveFile: (): unknown => null,
+		getLeavesOfType: (): unknown[] => [],
 		getLeaf: (): { openFile: (file: unknown) => Promise<void> } => ({
 			openFile: async () => {},
 		}),
+		/** Returns an EventRef in the real API; the plugin only ever passes it to registerEvent. */
+		on: (name: string, callback: unknown): unknown => ({ name, callback }),
+		off: (): void => {},
 	};
 
 	vault = {
@@ -43,6 +47,40 @@ export async function loadPdfJs(): Promise<unknown> {
 }
 
 export class MarkdownView {}
+
+/**
+ * `View` → `FileView` → `EditableFileView` → `TextFileView`, flattened to the members the
+ * plugin actually touches. Checked against node_modules/obsidian/obsidian.d.ts rather than
+ * recalled — `TextFileView` is where `data`, `requestSave()` and the get/setViewData contract
+ * live, and ReaderView is built on all four.
+ */
+export class View {
+	containerEl = { children: [null, null] } as unknown as HTMLElement;
+	contentEl = {} as unknown as HTMLElement;
+
+	constructor(public leaf: unknown) {}
+
+	registerDomEvent(): void {}
+	registerEvent(): void {}
+	registerInterval(): number {
+		return 0;
+	}
+	register(_cb: () => unknown): void {}
+	async onOpen(): Promise<void> {}
+	async onClose(): Promise<void> {}
+}
+
+export class FileView extends View {
+	file: TFile | null = null;
+}
+
+export class EditableFileView extends FileView {}
+
+export class TextFileView extends EditableFileView {
+	data = "";
+	requestSave: () => void = () => {};
+}
+
 export class TFile {}
 export class TFolder {}
 
@@ -86,6 +124,9 @@ export class Plugin {
 	readonly settingTabs: PluginSettingTab[] = [];
 	readonly commands: Command[] = [];
 	readonly postProcessors: unknown[] = [];
+	readonly views = new Map<string, unknown>();
+	readonly extensions = new Map<string, string>();
+	readonly events: unknown[] = [];
 	private readonly registered: (() => unknown)[] = [];
 
 	constructor(
@@ -105,6 +146,29 @@ export class Plugin {
 	registerMarkdownPostProcessor(processor: unknown): unknown {
 		this.postProcessors.push(processor);
 		return processor;
+	}
+
+	registerView(type: string, creator: unknown): void {
+		this.views.set(type, creator);
+	}
+
+	/**
+	 * The real one **throws** for an extension that is already registered, which is why
+	 * Reader claims `.reader` and not `.pdf` — core owns `pdf`. Modelled faithfully so a
+	 * future attempt to claim a taken extension fails here rather than in a live window.
+	 */
+	registerExtensions(extensions: string[], viewType: string): void {
+		for (const extension of extensions) {
+			if (this.extensions.has(extension)) {
+				throw new Error(`Attempting to register an existing file extension "${extension}"`);
+			}
+		}
+		for (const extension of extensions) this.extensions.set(extension, viewType);
+	}
+
+	registerEvent(ref: unknown): unknown {
+		this.events.push(ref);
+		return ref;
 	}
 
 	register(cb: () => unknown): void {
