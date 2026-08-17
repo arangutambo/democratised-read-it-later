@@ -176,8 +176,14 @@ export function insertBulletInPageOrder(
 	const after = lines.slice(at);
 	const inserted = [...bullet.split("\n"), ""];
 
-	// Trim a blank line that would otherwise double up where we cut in.
-	while (before.length > 0 && before[before.length - 1].trim() === "") before.pop();
+	/*
+	 * Trim a blank line that would otherwise double up where we cut in.
+	 *
+	 * Strictly empty, not whitespace-only. The writing line under every clip is a lone tab,
+	 * which `trim()` reports as blank — so trimming that way ate the previous clip's writing
+	 * line on every insert, and the note's structure degraded a little with each one.
+	 */
+	while (before.length > 0 && before[before.length - 1] === "") before.pop();
 	if (before.length > 0) before.push("");
 
 	const merged = [...before, ...inserted, ...after];

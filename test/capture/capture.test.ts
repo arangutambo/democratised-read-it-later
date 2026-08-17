@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { CaptureError, makeClip, normaliseRect, tidyQuote } from "../../src/capture/capture";
+import {
+	CaptureError,
+	makeClip,
+	normaliseRect,
+	tidyQuote,
+	unmappableRatio,
+	UNMAPPABLE_LIMIT,
+} from "../../src/capture/capture";
 import type { CaptureRequest } from "../../src/capture/types";
 
 const CONTEXT = {
@@ -109,5 +116,47 @@ describe("makeClip", () => {
 		makeClip(request({ kind: "image", text: undefined, locator }), CONTEXT, "a.png");
 
 		expect(locator.rect).toEqual([0.9, 0.9, 0.5, 0.5]);
+	});
+});
+
+/**
+ * Typeset maths, and why a quote of it is refused.
+ *
+ * LaTeX draws maths from Computer Modern fonts whose glyphs often carry no Unicode mapping.
+ * Inline maths survives — `v · w = v1 w1 + v2 w2` extracts readably, if flattened. Displayed
+ * maths does not, and a quote of a column vector arrived in the note as
+ * `v =⃝⃝⃝⃝⃝v1v2...vn⃝⃝⃝⃝⃝`. Those characters are not in the file to recover.
+ */
+describe("unmappableRatio", () => {
+	it("is zero for ordinary prose", () => {
+		expect(unmappableRatio("Gibbs sampling converges to a local optimum.")).toBe(0);
+	});
+
+	it("is zero for inline maths, which extracts fine", () => {
+		// Taken from the workbook: subscripts flatten, but every character is real.
+		expect(unmappableRatio("v · w = v1 w1 + v2 w2 .")).toBe(0);
+	});
+
+	it("catches the combining enclosures a displayed column vector produces", () => {
+		const real = "v =⃝⃝⃝⃝⃝v1v2...vn⃝⃝⃝⃝⃝";
+		expect(unmappableRatio(real)).toBeGreaterThan(UNMAPPABLE_LIMIT);
+	});
+
+	it("catches replacement characters", () => {
+		expect(unmappableRatio("���� abc")).toBeGreaterThan(UNMAPPABLE_LIMIT);
+	});
+
+	it("catches private-use glyphs", () => {
+		expect(unmappableRatio(" abc")).toBeGreaterThan(UNMAPPABLE_LIMIT);
+	});
+
+	it("tolerates a single stray glyph in a good sentence", () => {
+		// A lone ligature failure is not a reason to refuse a whole paragraph.
+		const sentence = `A sentence of perfectly ordinary length with one bad glyph � in it.`;
+		expect(unmappableRatio(sentence)).toBeLessThan(UNMAPPABLE_LIMIT);
+	});
+
+	it("is zero for an empty selection rather than dividing by zero", () => {
+		expect(unmappableRatio("")).toBe(0);
 	});
 });

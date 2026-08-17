@@ -144,3 +144,93 @@ describe("appendClip", () => {
 		expect(body).not.toContain("page=");
 	});
 });
+
+/**
+ * Clipping out of order, through the real write path.
+ *
+ * The unit tests cover the sort; this covers the loop that actually runs — read the note,
+ * insert, write it back, and do it again. That is where the writing lines were being eaten.
+ */
+describe("clipping out of document order", () => {
+	function at(id: string, page: number, top: number, text: string): Clip {
+		return {
+			id,
+			documentId: "d.reader",
+			kind: "quote",
+			created: "2026-01-01T00:00:00.000Z",
+			text,
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [0.1, top, 0.2, 0.05] },
+		};
+	}
+
+	async function clipAll(app: App, clips: Clip[]): Promise<void> {
+		const seen: Record<string, Clip["locator"]> = {};
+		const positionAt = (blockId: string) => {
+			for (const [id, locator] of Object.entries(seen)) {
+				if (id.toLowerCase() === blockId) {
+					return {
+						page: locator.surface.index,
+						top: locator.rect?.[1] ?? 0,
+						left: locator.rect?.[0] ?? 0,
+					};
+				}
+			}
+			return undefined;
+		};
+
+		for (const clip of clips) {
+			await appendClip(app, "n.md", clip, { positionAt });
+			seen[clip.id] = clip.locator;
+		}
+	}
+
+	it("puts them in reading order however they were made", async () => {
+		const { app, vault } = fakeApp();
+		await clipAll(app, [
+			at("AAA", 9, 0.1, "page nine"),
+			at("BBB", 2, 0.1, "page two"),
+			at("CCC", 5, 0.1, "page five"),
+			at("DDD", 5, 0.8, "page five, lower down"),
+		]);
+
+		const body = vault.files.get("n.md") ?? "";
+		const order = ["page two", "page five", "page five, lower down", "page nine"].map((t) => body.indexOf(t));
+
+		expect(order.every((i) => i >= 0)).toBe(true);
+		expect(order).toEqual([...order].sort((a, b) => a - b));
+	});
+
+	it("leaves every clip its writing line", async () => {
+		/*
+		 * The insert trimmed trailing blank lines with `.trim() === ""`, which is true of the
+		 * lone tab under each clip — so every insert ate the previous clip's writing line and
+		 * the note degraded a little each time.
+		 */
+		const { app, vault } = fakeApp();
+		await clipAll(app, [at("AAA", 9, 0.1, "nine"), at("BBB", 2, 0.1, "two"), at("CCC", 5, 0.1, "five")]);
+
+		const lines = (vault.files.get("n.md") ?? "").split("\n");
+		const bullets = lines.map((l, i) => [l, i] as const).filter(([l]) => l.startsWith("- "));
+
+		expect(bullets).toHaveLength(3);
+		for (const [, i] of bullets) expect(lines[i + 1]).toBe("\t");
+	});
+
+	it("keeps prose written under a clip attached to it", async () => {
+		const { app, vault } = fakeApp();
+		await clipAll(app, [at("AAA", 9, 0.1, "nine")]);
+
+		// Write under the first clip, the way you would while reading.
+		const withProse = (vault.files.get("n.md") ?? "").replace("\t", "\tmy working for page nine");
+		vault.files.set("n.md", withProse);
+
+		await appendClip(app, "n.md", at("BBB", 2, 0.1, "two"), {
+			positionAt: (id) => (id === "aaa" ? { page: 9, top: 0.1, left: 0.1 } : undefined),
+		});
+
+		const lines = (vault.files.get("n.md") ?? "").split("\n");
+		const nine = lines.findIndex((l) => l.includes("nine"));
+
+		expect(lines[nine + 1]).toBe("\tmy working for page nine");
+	});
+});

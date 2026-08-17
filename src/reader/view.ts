@@ -14,7 +14,7 @@
 
 import { Notice, Platform, TFile, TextFileView, type WorkspaceLeaf } from "obsidian";
 
-import { makeClip } from "../capture/capture";
+import { makeClip, unmappableRatio, UNMAPPABLE_LIMIT } from "../capture/capture";
 import type { CaptureRequest, NormalisedRect } from "../capture/types";
 import { Logger } from "../core/log";
 import { appendClip } from "../note/append";
@@ -135,6 +135,49 @@ export class ReaderView extends TextFileView {
 
 		// Focusable, so the three keys have somewhere to land.
 		root.tabIndex = -1;
+
+		/*
+		 * Re-render when the pane is resized.
+		 *
+		 * Canvases are rasterised at a fixed pixel width, so dragging the split wider left the
+		 * pages stretched and soft — and, worse, the text layer stopped lining up with them,
+		 * which made selection miss. CSS alone cannot fix that; the page has to be redrawn.
+		 *
+		 * Debounced hard, because a drag fires this continuously and each re-render is real
+		 * pdf.js work.
+		 */
+		let pending: number | undefined;
+		let lastWidth = 0;
+		const observer = new ResizeObserver((entries) => {
+			const width = Math.round(entries[0]?.contentRect.width ?? 0);
+			// Height changes alone do not affect rasterisation.
+			if (width === lastWidth || width === 0) return;
+			lastWidth = width;
+
+			window.clearTimeout(pending);
+			pending = window.setTimeout(() => void this.rerenderVisible(), 250);
+		});
+		observer.observe(this.scroller);
+
+		this.register(() => {
+			observer.disconnect();
+			window.clearTimeout(pending);
+		});
+	}
+
+	/** Redraw the pages currently held, at the new width. */
+	private async rerenderVisible(): Promise<void> {
+		const held = this.window?.held ?? [];
+		if (held.length === 0) return;
+
+		this.renderAbort?.abort();
+		const controller = new AbortController();
+		this.renderAbort = controller;
+
+		for (const page of held) {
+			if (controller.signal.aborted) return;
+			await this.renderOne(page, controller.signal);
+		}
 	}
 
 	protected override async onClose(): Promise<void> {
@@ -162,10 +205,15 @@ export class ReaderView extends TextFileView {
 			}
 
 			this.surface = surface;
+			// Assigned *before* reconciling. `getViewData()` falls back to `this.data` — the raw
+			// text as loaded — when there is no document, so a save landing in that window wrote
+			// the un-reconciled file straight back and every dropped mark returned.
+			this.doc = document;
 			this.doc = await this.reconcileWithNote(document);
 			this.window = new PageWindow({ total: surface.pageCount, budget: this.deps.pageBudget });
 
 			await this.buildPages();
+			this.watchNote();
 			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page`);
 		} catch (error) {
 			this.deps.log.error("could not open the document", error);
@@ -210,6 +258,53 @@ export class ReaderView extends TextFileView {
 			this.requestSave();
 		}
 		return result.document;
+	}
+
+	/**
+	 * Reconcile whenever the note changes, not only when the document is opened.
+	 *
+	 * Deleting a bullet with the reader open left its mark on the page — and worse, the next
+	 * debounced save wrote the still-in-memory clip list back, so the mark survived a reopen
+	 * too. Watching the note makes deletion take effect where you can see it.
+	 *
+	 * Debounced: Obsidian fires `modify` on every keystroke once its own save settles, and
+	 * re-reading the note on each one would be a read per character typed.
+	 */
+	private watchNote(): void {
+		let pending: number | undefined;
+
+		this.registerEvent(
+			this.app.vault.on("modify", (file) => {
+				if (file.path !== this.doc?.notePath) return;
+
+				window.clearTimeout(pending);
+				pending = window.setTimeout(() => void this.reconcileNow(), 600);
+			}),
+		);
+
+		// The timer is the one thing Obsidian does not own here.
+		this.register(() => window.clearTimeout(pending));
+	}
+
+	private async reconcileNow(): Promise<void> {
+		const doc = this.doc;
+		if (!doc) return;
+
+		const note = this.app.vault.getAbstractFileByPath(doc.notePath);
+		if (!(note instanceof TFile)) return;
+
+		const result = reconcile(doc, await this.app.vault.read(note));
+		if (!result.changed) return;
+
+		this.doc = result.document;
+		this.requestSave();
+
+		// Redraw only the pages that lost something.
+		for (const id of result.dropped) {
+			const page = doc.clips[id]?.surface.index;
+			if (page !== undefined) this.drawMarks(page);
+		}
+		this.deps.log.info(`dropped ${result.dropped.length} mark(s) deleted from the note`);
 	}
 
 	// ------------------------------------------------------------------------- rendering
@@ -433,6 +528,22 @@ export class ReaderView extends TextFileView {
 		const captured = captureSelection(selection, pageEl, page?.text ?? "");
 		if (!captured) {
 			new Notice("Reader: nothing is selected.");
+			return;
+		}
+
+		/*
+		 * Displayed maths does not survive text extraction — the stretchy brackets of a column
+		 * vector and the big operators are Computer Modern glyphs with no Unicode meaning, so a
+		 * quote of one arrives as `v =⃝⃝⃝⃝⃝v1v2...vn⃝⃝⃝⃝⃝`. Nothing recovers those characters;
+		 * they are not in the file. Say so, and point at the gesture that does work.
+		 */
+		if (unmappableRatio(captured.text) > UNMAPPABLE_LIMIT) {
+			new Notice(
+				"Reader: that selection is mostly typeset maths, which a PDF stores as shapes " +
+					"rather than characters — quoting it would write nonsense. Press r and drag a " +
+					"box around it instead.",
+				12_000,
+			);
 			return;
 		}
 

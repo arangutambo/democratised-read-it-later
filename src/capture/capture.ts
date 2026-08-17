@@ -51,6 +51,47 @@ export function tidyQuote(raw: string): string {
 	);
 }
 
+/**
+ * How much of this text the PDF could not express as characters.
+ *
+ * Maths typeset by LaTeX draws from Computer Modern fonts whose glyphs often carry no
+ * meaningful Unicode mapping. Inline maths usually survives — `v · w = v1 w1 + v2 w2` comes
+ * out readable, if flattened. **Displayed** maths does not: the stretchy brackets of a column
+ * vector, big operators and matrix rules extract as replacement characters, private-use
+ * codepoints or combining enclosures, and a selection over one lands in the note as
+ * `v =⃝⃝⃝⃝⃝v1v2...vn⃝⃝⃝⃝⃝`.
+ *
+ * No amount of cleverness recovers those characters — they are not in the file. The useful
+ * response is to notice and say so, because the region clip captures the same maths perfectly
+ * as an image.
+ */
+export function unmappableRatio(text: string): number {
+	const chars = [...text];
+	if (chars.length === 0) return 0;
+
+	let bad = 0;
+	for (const ch of chars) {
+		const c = ch.codePointAt(0) ?? 0;
+		if (
+			c === 0xfffd || // replacement character
+			(c >= 0xe000 && c <= 0xf8ff) || // private use area
+			(c >= 0x20d0 && c <= 0x20f0) || // combining diacritical marks for symbols
+			(c >= 0xfff9 && c <= 0xfffb) // interlinear annotation
+		) {
+			bad++;
+		}
+	}
+	return bad / chars.length;
+}
+
+/**
+ * Above this, the quote is mostly glyphs rather than words and is not worth writing down.
+ *
+ * Deliberately not zero: a single stray glyph in an otherwise good sentence should still be
+ * clippable, and a lone degree sign or ligature failure is not a reason to refuse.
+ */
+export const UNMAPPABLE_LIMIT = 0.15;
+
 export interface CaptureContext {
 	documentId: string;
 	now?: () => number;
