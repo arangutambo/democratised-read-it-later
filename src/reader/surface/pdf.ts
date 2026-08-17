@@ -78,6 +78,8 @@ export class PdfSurface implements DocumentSurfaces {
 	private readonly createCanvas: () => HTMLCanvasElement;
 	/** Cached page proxies. pdf.js caches internally too, but `cleanup()` is ours to call. */
 	private readonly pages = new Map<number, PdfPage>();
+	/** Page text, kept for search. Dropped with the document. */
+	private readonly textCache = new Map<number, string>();
 	private closed = false;
 
 	private constructor(
@@ -259,6 +261,24 @@ export class PdfSurface implements DocumentSurfaces {
 		return this.renderRegion(number, WHOLE_SURFACE, dpi, signal);
 	}
 
+	/**
+	 * A page's text as one string, cached.
+	 *
+	 * Search asks for every page in turn, and a second search of the same document must not
+	 * re-extract anything — each call is a worker round trip, and a 315-page workbook is 315
+	 * of them. The cache is dropped with the document.
+	 */
+	async pageText(number: number): Promise<string> {
+		const clamped = Math.min(this.pageCount, Math.max(1, Math.floor(number)));
+		const cached = this.textCache.get(clamped);
+		if (cached !== undefined) return cached;
+
+		const spans = await this.textLayer(clamped);
+		const text = spans.map((span) => span.text).join(" ").replace(/\s+/g, " ").trim();
+		this.textCache.set(clamped, text);
+		return text;
+	}
+
 	/** Positioned text for the selectable layer over a rendered page. */
 	async textLayer(number: number): Promise<TextSpan[]> {
 		const page = await this.page(number);
@@ -357,6 +377,7 @@ export class PdfSurface implements DocumentSurfaces {
 
 		for (const page of this.pages.values()) page.cleanup?.();
 		this.pages.clear();
+		this.textCache.clear();
 
 		await this.task.destroy().catch(() => {});
 	}

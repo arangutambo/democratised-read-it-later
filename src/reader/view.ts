@@ -63,6 +63,15 @@ export class ReaderView extends TextFileView {
 	private outlineEl!: HTMLElement;
 	/** The document's table of contents, resolved once on open. */
 	private outline: OutlineEntry[] = [];
+
+	private searchEl!: HTMLElement;
+	private searchInput!: HTMLInputElement;
+	private searchStatusEl!: HTMLElement;
+	private searchResultsEl!: HTMLElement;
+	private searchAbort?: AbortController;
+
+	/** Display scale. 1 fills the pane; larger zooms in and the column scrolls sideways. */
+	private zoom = 1;
 	private statusEl!: HTMLElement;
 
 	private readonly pages = new Map<number, PageElement>();
@@ -133,6 +142,33 @@ export class ReaderView extends TextFileView {
 		root.empty();
 		root.addClass("reader-view");
 
+		this.searchEl = root.createDiv({ cls: "reader-search is-hidden" });
+		this.searchInput = this.searchEl.createEl("input", {
+			type: "search",
+			placeholder: "Find in document…",
+		});
+		this.searchStatusEl = this.searchEl.createDiv({ cls: "reader-search-status" });
+		this.searchResultsEl = this.searchEl.createDiv({ cls: "reader-search-results" });
+
+		// Debounced: a keystroke abandons the previous sweep rather than racing it.
+		let pendingSearch: number | undefined;
+		this.registerDomEvent(this.searchInput, "input", () => {
+			window.clearTimeout(pendingSearch);
+			pendingSearch = window.setTimeout(() => void this.runSearch(this.searchInput.value), 250);
+		});
+		this.registerDomEvent(this.searchInput, "keydown", (event) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				this.toggleSearch(false);
+			}
+			// The three keys must not fire while you are typing a query.
+			event.stopPropagation();
+		});
+		this.register(() => {
+			window.clearTimeout(pendingSearch);
+			this.searchAbort?.abort();
+		});
+
 		const body = root.createDiv({ cls: "reader-body" });
 		this.outlineEl = body.createDiv({ cls: "reader-outline" });
 		this.scroller = body.createDiv({ cls: "reader-scroller" });
@@ -173,6 +209,88 @@ export class ReaderView extends TextFileView {
 			observer.disconnect();
 			window.clearTimeout(pending);
 		});
+	}
+
+	/**
+	 * Show or hide the find bar.
+	 *
+	 * Focus goes to the input on open, because the whole point of a key is not reaching for
+	 * the mouse afterwards.
+	 */
+	private toggleSearch(show: boolean): void {
+		this.searchEl.toggleClass("is-hidden", !show);
+		if (show) {
+			this.searchInput.focus();
+			this.searchInput.select();
+		} else {
+			this.searchAbort?.abort();
+			this.contentEl.focus();
+		}
+	}
+
+	/** Sweep the document, showing results as they arrive. */
+	private async runSearch(query: string): Promise<void> {
+		const surface = this.surface;
+		if (!surface) return;
+
+		this.searchAbort?.abort();
+		const controller = new AbortController();
+		this.searchAbort = controller;
+
+		this.searchResultsEl.empty();
+		if (query.trim() === "") {
+			this.searchStatusEl.setText("");
+			return;
+		}
+
+		const { searchDocument } = await import("./search");
+		let shown = 0;
+
+		const render = (hits: { page: number; snippet: string }[]) => {
+			// Only the new ones: rebuilding the list on every page would flicker for 315 pages.
+			for (const hit of hits.slice(shown)) {
+				const row = this.searchResultsEl.createDiv({ cls: "reader-search-hit" });
+				row.createSpan({ cls: "reader-search-page", text: `p${hit.page}` });
+				row.createSpan({ cls: "reader-search-snippet", text: hit.snippet });
+				this.registerDomEvent(row, "click", () => this.goToPage(hit.page, "smooth"));
+			}
+			shown = hits.length;
+		};
+
+		const hits = await searchDocument(query, surface.pageCount, (page) => surface.pageText(page), {
+			signal: controller.signal,
+			onProgress: ({ done, total, hits: found }) => {
+				if (controller.signal.aborted) return;
+				this.searchStatusEl.setText(
+					done < total ? `${found.length} so far — searching ${done}/${total}…` : "",
+				);
+				render(found);
+			},
+		});
+
+		if (controller.signal.aborted) return;
+		this.searchStatusEl.setText(hits.length === 0 ? "No matches." : `${hits.length} matches`);
+	}
+
+	/**
+	 * Set the display scale and re-render what is on screen.
+	 *
+	 * The pages are laid out by width, so zoom is simply a multiplier on the column's width —
+	 * which keeps every position normalised and every mark correct without touching them.
+	 */
+	private async setZoom(next: number): Promise<void> {
+		const clamped = Math.min(4, Math.max(0.5, Number(next.toFixed(3))));
+		if (clamped === this.zoom) return;
+
+		this.zoom = clamped;
+		if (this.doc) {
+			this.doc.view.zoom = clamped;
+			this.requestSave();
+		}
+
+		this.scroller.style.setProperty("--reader-zoom", String(clamped));
+		this.setStatus(`${Math.round(clamped * 100)}% · = and - to zoom, 0 to reset`);
+		await this.rerenderVisible();
 	}
 
 	/** Redraw the pages currently held, at the new width. */
@@ -226,9 +344,11 @@ export class ReaderView extends TextFileView {
 			await this.buildOutline();
 			// Reopen where you left off. `.reader` has recorded this all along and nothing ever
 			// acted on it, so a 142-page workbook started at page 1 every single time.
+			this.zoom = Math.min(4, Math.max(0.5, document.view.zoom || 1));
+			this.scroller.style.setProperty("--reader-zoom", String(this.zoom));
 			this.goToPage(document.view.surface, "auto");
 			this.watchNote();
-			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page · shift = parent`);
+			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page · shift = parent · f find · o outline`);
 		} catch (error) {
 			this.deps.log.error("could not open the document", error);
 			const message = error instanceof Error ? error.message : "Could not open this document.";
@@ -442,7 +562,7 @@ export class ReaderView extends TextFileView {
 		if (!surface || !page) return;
 
 		try {
-			const cssWidth = Math.max(200, this.scroller.clientWidth - 32);
+			const cssWidth = Math.max(200, (this.scroller.clientWidth - 32) * this.zoom);
 			const rendered = await surface.renderPage(
 				pageNumber,
 				cssWidth,
@@ -503,6 +623,31 @@ export class ReaderView extends TextFileView {
 				event.preventDefault();
 				void this.clipWholePage(asParent);
 				break;
+			case "f":
+				event.preventDefault();
+				this.toggleSearch(true);
+				break;
+			case "o":
+				event.preventDefault();
+				if (this.outline.length === 0) {
+					new Notice("Reader: this document has no table of contents.");
+					break;
+				}
+				this.outlineEl.toggleClass("is-hidden", !this.outlineEl.hasClass("is-hidden"));
+				break;
+			case "=":
+			case "+":
+				event.preventDefault();
+				void this.setZoom(this.zoom * 1.25);
+				break;
+			case "-":
+				event.preventDefault();
+				void this.setZoom(this.zoom / 1.25);
+				break;
+			case "0":
+				event.preventDefault();
+				void this.setZoom(1);
+				break;
 			// Escape is handled on the document while armed — see armRegion().
 		}
 	}
@@ -543,7 +688,7 @@ export class ReaderView extends TextFileView {
 		this.escapeHandler?.();
 		this.escapeHandler = undefined;
 		this.scroller.removeClass("is-arming-region");
-		this.setStatus(`${this.surface?.pageCount ?? 0} pages · q quote · r region · p page · shift = parent`);
+		this.setStatus(`${this.surface?.pageCount ?? 0} pages · q quote · r region · p page · shift = parent · f find · o outline`);
 	}
 
 	private onMouseDown(event: MouseEvent): void {

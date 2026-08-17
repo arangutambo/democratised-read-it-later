@@ -39,7 +39,8 @@
 .reader-page {
 	position: relative;
 	flex: 0 0 auto;
-	width: 100%;
+	/* Zoom is a multiplier on the column's width; everything inside stays normalised. */
+	width: calc(100% * var(--reader-zoom, 1));
 	max-width: 100%;
 	background-color: var(--background-primary);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
@@ -321,4 +322,69 @@
 	/* A destination pdf.js could not resolve: still worth showing, not worth clicking. */
 	cursor: default;
 	opacity: 0.5;
+}
+
+/* Zoom multiplies the column's width; pages stay proportional, so marks need no adjusting. */
+.reader-scroller {
+	--reader-zoom: 1;
+}
+
+/*
+ * Find in document.
+ *
+ * Results stream in as pages are indexed, because a 315-page workbook is a worker round trip
+ * per page and waiting for all of them before showing anything would feel broken.
+ */
+.reader-search {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-2);
+	padding: var(--size-2-3) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+}
+
+.reader-search.is-hidden {
+	display: none;
+}
+
+.reader-search input {
+	width: 100%;
+}
+
+.reader-search-status {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-search-results {
+	max-height: 30vh;
+	overflow-y: auto;
+}
+
+.reader-search-hit {
+	display: flex;
+	gap: var(--size-4-2);
+	padding: var(--size-2-1) var(--size-2-2);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-search-hit:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.reader-search-page {
+	flex: 0 0 3em;
+	color: var(--text-accent);
+	font-variant-numeric: tabular-nums;
+}
+
+.reader-search-snippet {
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
