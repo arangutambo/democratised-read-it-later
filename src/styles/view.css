@@ -469,3 +469,53 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 }
+
+/*
+ * A book's section.
+ *
+ * Unlike a page, this has no fixed shape — it is as tall as its text. So the box grows, the
+ * text is real text rather than a transparent layer over pixels, and the measure is capped
+ * because a chapter set at the full width of a monitor is unreadable.
+ */
+.reader-page.is-section {
+	width: min(100%, 40em);
+	height: auto;
+	aspect-ratio: auto;
+	padding: var(--size-4-6) var(--size-4-8);
+	line-height: var(--line-height-normal);
+	user-select: text;
+}
+
+.reader-page.is-section .reader-page-canvas {
+	height: auto;
+}
+
+.reader-page.is-section img {
+	max-width: 100%;
+	height: auto;
+	display: block;
+	margin: var(--size-4-4) auto;
+}
+
+/* The book's own headings, kept in the book's own hierarchy. */
+.reader-page.is-section h1,
+.reader-page.is-section h2,
+.reader-page.is-section h3 {
+	line-height: var(--line-height-tight);
+}
+
+.reader-page.is-section blockquote {
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: var(--size-4-3);
+	color: var(--text-muted);
+}
+
+/* Clipping a figure: make it obvious what is about to be taken. */
+.reader-scroller.is-arming-region .reader-page.is-section img {
+	outline: 2px solid transparent;
+	cursor: crosshair;
+}
+
+.reader-scroller.is-arming-region .reader-page.is-section img:hover {
+	outline-color: var(--interactive-accent);
+}

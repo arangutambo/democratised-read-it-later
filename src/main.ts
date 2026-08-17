@@ -4,7 +4,7 @@ import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
 import { findExcalidraw } from "./excalidraw/handoff";
 import { LIBRARY_VIEW_TYPE, LibraryView } from "./library/view";
-import { isReadable } from "./reader/open";
+import { isReadable, kindOf } from "./reader/open";
 import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
 import { readerSkin } from "./render/reader-skin";
 import { collectQueue, ensureQueueBase } from "./review/queue";
@@ -350,13 +350,13 @@ export default class ReaderPlugin extends Plugin {
 			const { ensurePair } = await import("./reader/open");
 			const pair = await ensurePair(
 				this.app,
-				{ path: file.path, basename: file.basename, kind: "pdf" },
+				{ path: file.path, basename: file.basename, kind: kindOf(file) ?? "pdf" },
 				this.settings.sourcesFolder,
 			);
 
 			// Citation identity, if Zotero knows this file. Written once, at creation, so a
 			// citekey you have already cited is never moved under you.
-			if (pair.created) await this.addPaperFrontmatter(pair.notePath, file.path);
+			if (pair.created && kindOf(file) === "pdf") await this.addPaperFrontmatter(pair.notePath, file.path);
 
 			const readerFile = this.app.vault.getFileByPath(pair.readerPath);
 			if (!readerFile) throw new Error(`${pair.readerPath} could not be opened.`);

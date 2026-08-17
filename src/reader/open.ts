@@ -124,5 +124,17 @@ export async function ensurePair(
 
 /** Whether Reader can open this file at all. */
 export function isReadable(file: TFile): boolean {
-	return file.extension.toLowerCase() === "pdf";
+	return kindOf(file) !== undefined;
+}
+
+/** Which reader a file needs, or undefined when Reader cannot open it. */
+export function kindOf(file: TFile): SourceKind | undefined {
+	switch (file.extension.toLowerCase()) {
+		case "pdf":
+			return "pdf";
+		case "epub":
+			return "epub";
+		default:
+			return undefined;
+	}
 }

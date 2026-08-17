@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "obsidian";
 import { TFile, TFolder } from "../stubs/obsidian";
 
-import { ensurePair, isReadable } from "../../src/reader/open";
+import { ensurePair, isReadable, kindOf } from "../../src/reader/open";
 
 class FakeVault {
 	files = new Map<string, string>();
@@ -171,11 +171,21 @@ describe("isReadable", () => {
 		expect(isReadable(Object.assign(new TFile(), { extension: "PDF" }) as never)).toBe(true);
 	});
 
-	it("rejects everything else for now", () => {
-		// EPUB and video arrive at M7 and M8; claiming them early would offer a menu item that
-		// opens a view which cannot render them.
-		for (const extension of ["md", "epub", "mp4", "png", "reader"]) {
+	it("accepts an EPUB, whatever the case", () => {
+		expect(isReadable(Object.assign(new TFile(), { extension: "epub" }) as never)).toBe(true);
+		expect(isReadable(Object.assign(new TFile(), { extension: "EPUB" }) as never)).toBe(true);
+	});
+
+	it("rejects what Reader still cannot render", () => {
+		// Claiming a type early would offer a menu item that opens a view showing nothing.
+		for (const extension of ["md", "mp4", "png", "reader", "docx"]) {
 			expect(isReadable(Object.assign(new TFile(), { extension }) as never)).toBe(false);
 		}
+	});
+
+	it("names the engine a file needs", () => {
+		expect(kindOf(Object.assign(new TFile(), { extension: "pdf" }) as never)).toBe("pdf");
+		expect(kindOf(Object.assign(new TFile(), { extension: "epub" }) as never)).toBe("epub");
+		expect(kindOf(Object.assign(new TFile(), { extension: "mp4" }) as never)).toBeUndefined();
 	});
 });

@@ -15,7 +15,7 @@
 import { Notice, Platform, TFile, TextFileView, type WorkspaceLeaf } from "obsidian";
 
 import { makeClip, unmappableRatio, UNMAPPABLE_LIMIT } from "../capture/capture";
-import type { CaptureRequest, NormalisedRect } from "../capture/types";
+import type { CaptureRequest, Clip, NormalisedRect } from "../capture/types";
 import { Logger } from "../core/log";
 import { appendClip } from "../note/append";
 import { positionOf } from "../note/bullet";
@@ -31,6 +31,7 @@ import {
 	type PageElement,
 } from "./render/page-element";
 import { PageWindow } from "./render/virtualiser";
+import { EpubSurface } from "../epub/surface";
 import { PdfSurface, type OutlineEntry } from "./surface/pdf";
 import {
 	createDocument,
@@ -58,7 +59,18 @@ export class ReaderView extends TextFileView {
 	private readonly deps: ReaderViewDeps;
 
 	private doc?: ReaderDocument;
+	/**
+	 * The open document.
+	 *
+	 * Two shapes, and the difference runs deeper than rendering: a PDF page is pixels with an
+	 * invisible text layer over it, an EPUB section is already a DOM. So selection, structure
+	 * and figure clips all take a different route, and the branches are explicit rather than
+	 * hidden behind an abstraction that would have to lie about one of them.
+	 */
 	private surface?: PdfSurface;
+	private epub?: EpubSurface;
+	/** Releases the object URLs of sections currently rendered. */
+	private readonly sectionReleases = new Map<number, () => void>();
 	private window?: PageWindow;
 
 	private scroller!: HTMLElement;
@@ -129,9 +141,16 @@ export class ReaderView extends TextFileView {
 		this.pages.clear();
 		this.window = undefined;
 
+		for (const release of this.sectionReleases.values()) release();
+		this.sectionReleases.clear();
+
 		const surface = this.surface;
 		this.surface = undefined;
 		void surface?.close();
+
+		const epub = this.epub;
+		this.epub = undefined;
+		void epub?.close();
 
 		this.doc = undefined;
 		this.scroller?.replaceChildren();
@@ -327,6 +346,24 @@ export class ReaderView extends TextFileView {
 			const bytes = await this.readSource(document.source.path);
 			if (token !== this.loadToken) return;
 
+			if (document.source.kind === "epub") {
+				const epub = await EpubSurface.open(bytes);
+				if (token !== this.loadToken) return;
+
+				this.epub = epub;
+				this.doc = document;
+				this.doc = await this.reconcileWithNote(document);
+				this.window = new PageWindow({ total: epub.count, budget: this.deps.pageBudget });
+				if (this.file) this.deps.onPageCount?.(this.file.path, epub.count);
+
+				await this.buildPages(epub.count, 1.4);
+				this.buildOutlineFrom(epub.outline());
+				this.goToPage(document.view.surface, "auto");
+				this.watchNote();
+				this.setStatus(`${epub.count} sections · q quote · r figure · shift = parent`);
+				return;
+			}
+
 			const surface = await PdfSurface.open(bytes);
 			if (token !== this.loadToken) {
 				// The view moved on while pdf.js was starting; this document is already stale.
@@ -447,17 +484,26 @@ export class ReaderView extends TextFileView {
 
 	// ------------------------------------------------------------------------- rendering
 
-	private async buildPages(): Promise<void> {
+	private async buildPages(count?: number, ratioOverride?: number): Promise<void> {
 		const surface = this.surface;
-		if (!surface) return;
+		if (!surface && count === undefined) return;
 
 		this.scroller.empty();
 		this.pages.clear();
 
-		// One page's aspect ratio stands in for all of them, so the scrollbar is right
-		// immediately. Asking pdf.js for 315 page sizes up front costs seconds.
-		const first = await surface.size(1);
-		const ratio = first.height / first.width;
+		/*
+		 * One page's aspect ratio stands in for all of them, so the scrollbar is right
+		 * immediately. Asking pdf.js for 315 page sizes up front costs seconds.
+		 *
+		 * A section has no intrinsic ratio — it is as tall as its text makes it — so the caller
+		 * supplies a guess and the box grows to fit once the section is in.
+		 */
+		const total = count ?? surface?.pageCount ?? 0;
+		let ratio = ratioOverride ?? 1.4;
+		if (ratioOverride === undefined && surface) {
+			const first = await surface.size(1);
+			ratio = first.height / first.width;
+		}
 
 		const observer = new IntersectionObserver((entries) => this.onVisible(entries), {
 			root: this.scroller,
@@ -470,7 +516,7 @@ export class ReaderView extends TextFileView {
 		// stops even if that path changes.
 		this.register(() => observer.disconnect());
 
-		for (let n = 1; n <= surface.pageCount; n++) {
+		for (let n = 1; n <= total; n++) {
 			const page = createPageElement(n);
 			page.root.style.aspectRatio = `1 / ${ratio}`;
 			this.pages.set(n, page);
@@ -489,7 +535,11 @@ export class ReaderView extends TextFileView {
 		const surface = this.surface;
 		if (!surface) return;
 
-		const entries = await surface.outline().catch(() => []);
+		this.buildOutlineFrom(await surface.outline().catch(() => []));
+	}
+
+	/** Render a table of contents, whatever produced it. */
+	private buildOutlineFrom(entries: OutlineEntry[]): void {
 		this.outline = entries;
 		this.outlineEl.empty();
 
@@ -544,6 +594,9 @@ export class ReaderView extends TextFileView {
 		for (const n of change.release) {
 			const page = this.pages.get(n);
 			if (page) releaseCanvas(page);
+			// An object URL keeps its blob alive for the life of the document.
+			this.sectionReleases.get(n)?.();
+			this.sectionReleases.delete(n);
 		}
 
 		this.doc.view.surface = pageNumber;
@@ -561,9 +614,33 @@ export class ReaderView extends TextFileView {
 	}
 
 	private async renderOne(pageNumber: number, signal: AbortSignal): Promise<void> {
-		const surface = this.surface;
 		const page = this.pages.get(pageNumber);
-		if (!surface || !page) return;
+		if (!page) return;
+
+		if (this.epub) {
+			try {
+				const { element, release } = await this.epub.renderSection(pageNumber);
+				if (signal.aborted) {
+					release();
+					return;
+				}
+
+				this.sectionReleases.get(pageNumber)?.();
+				this.sectionReleases.set(pageNumber, release);
+
+				page.canvasHost.replaceChildren(...Array.from(element.childNodes));
+				// A section is as tall as its text; a fixed ratio would clip or pad it.
+				page.root.style.aspectRatio = "";
+				page.root.addClass("is-section");
+				this.drawMarks(pageNumber);
+			} catch (error) {
+				if (!signal.aborted) this.deps.log.warn(`section ${pageNumber} did not render`, error);
+			}
+			return;
+		}
+
+		const surface = this.surface;
+		if (!surface) return;
 
 		try {
 			const cssWidth = Math.max(200, (this.scroller.clientWidth - 32) * this.zoom);
@@ -621,7 +698,12 @@ export class ReaderView extends TextFileView {
 				break;
 			case "r":
 				event.preventDefault();
-				this.armRegion(asParent);
+				if (this.epub) {
+					// There is no page to crop. `r` takes the figure under the pointer instead.
+					this.armFigure(asParent);
+				} else {
+					this.armRegion(asParent);
+				}
 				break;
 			case "p":
 				event.preventDefault();
@@ -654,6 +736,32 @@ export class ReaderView extends TextFileView {
 				break;
 			// Escape is handled on the document while armed — see armRegion().
 		}
+	}
+
+	/** Wait for a click on a figure, then clip that figure's file. */
+	private armFigure(asParent = false): void {
+		this.setStatus("Click a figure to clip it. Escape to cancel.");
+		this.scroller.addClass("is-arming-region");
+
+		const onClick = (event: MouseEvent) => {
+			cleanup();
+			void this.clipEpubFigure(event.target as HTMLElement, asParent);
+		};
+		const onEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			cleanup();
+		};
+		const cleanup = () => {
+			this.scroller.removeEventListener("click", onClick, true);
+			document.removeEventListener("keydown", onEscape, true);
+			this.scroller.removeClass("is-arming-region");
+			this.setStatus(`${this.epub?.count ?? 0} sections · q quote · r figure · shift = parent`);
+		};
+
+		this.scroller.addEventListener("click", onClick, true);
+		document.addEventListener("keydown", onEscape, true);
+		this.register(cleanup);
 	}
 
 	private armRegion(asParent = false): void {
@@ -748,6 +856,10 @@ export class ReaderView extends TextFileView {
 		const doc = this.doc;
 		if (!doc) return;
 
+		// A section is already a DOM, so the selection is the text — no layer to reconcile, and
+		// the structure comes from real headings and lists rather than being inferred.
+		if (this.epub) return this.clipEpubSelection(asParent);
+
 		const selection = activeWindow.getSelection();
 		const pageEl = selection?.anchorNode
 			? ((selection.anchorNode as Node).parentElement?.closest(".reader-page") as HTMLElement | null)
@@ -796,11 +908,124 @@ export class ReaderView extends TextFileView {
 		selection?.removeAllRanges();
 	}
 
+	/**
+	 * A quote from a book.
+	 *
+	 * The text is exactly what the browser reports, because the markup is the book's own — none
+	 * of the geometry reconstruction a PDF needs, and none of its failure modes.
+	 */
+	private async clipEpubSelection(asParent: boolean): Promise<void> {
+		const selection = activeWindow.getSelection();
+		const text = (selection?.toString() ?? "").replace(/\s+/g, " ").trim();
+
+		if (text === "") {
+			new Notice("Reader: select some text first.");
+			return;
+		}
+
+		const pageEl = selection?.anchorNode
+			? ((selection.anchorNode as Node).parentElement?.closest(".reader-page") as HTMLElement | null)
+			: null;
+		const index = Number(pageEl?.dataset.page);
+		if (!pageEl || !Number.isFinite(index)) return;
+
+		const rect = this.selectionRectWithin(selection, pageEl);
+		const context = this.epub ? await this.epub.sectionText(index) : "";
+		const at = context.indexOf(text);
+
+		await this.commit({
+			kind: "quote",
+			text,
+			isParent: asParent,
+			locator: {
+				surface: { kind: "epub-section", index },
+				...(rect ? { rect } : {}),
+				quote: {
+					exact: text,
+					prefix: at >= 0 ? context.slice(Math.max(0, at - 32), at) : "",
+					suffix: at >= 0 ? context.slice(at + text.length, at + text.length + 32) : "",
+				},
+			},
+		});
+
+		selection?.removeAllRanges();
+	}
+
+	/** Where a selection sits within a section, normalised, so the mark can be redrawn. */
+	private selectionRectWithin(selection: Selection | null, pageEl: HTMLElement): NormalisedRect | undefined {
+		if (!selection || selection.rangeCount === 0) return undefined;
+
+		const box = selection.getRangeAt(0).getBoundingClientRect();
+		const within = pageEl.getBoundingClientRect();
+		if (within.width <= 0 || within.height <= 0) return undefined;
+
+		return toNormalised(
+			{
+				x: box.left - within.left,
+				y: box.top - within.top,
+				width: box.width,
+				height: box.height,
+			},
+			within.width,
+			within.height,
+		);
+	}
+
+	/**
+	 * A figure from a book, taken as the file rather than a picture of it.
+	 *
+	 * A PDF has to be rasterised because its figure is drawing instructions. An EPUB's figure
+	 * is already an image file, so the clip is the publisher's own artwork at full resolution
+	 * with no DPI decision to make — strictly better than a screenshot.
+	 */
+	private async clipEpubFigure(target: HTMLElement, asParent: boolean): Promise<void> {
+		const epub = this.epub;
+		const doc = this.doc;
+		if (!epub || !doc || !this.file) return;
+
+		const img = target.closest("img") as HTMLImageElement | null;
+		const src = img?.dataset.readerSrc;
+		const pageEl = target.closest(".reader-page") as HTMLElement | null;
+		const index = Number(pageEl?.dataset.page);
+
+		if (!src || !Number.isFinite(index)) {
+			new Notice("Reader: click a figure to clip it.");
+			return;
+		}
+
+		const found = await epub.readImage(index, src);
+		if (!found) {
+			new Notice("Reader: that figure is not in the book's archive.");
+			return;
+		}
+
+		const assetPath = await this.writeAsset(
+			this.file.basename,
+			index,
+			found.bytes,
+			extensionOf(found.path),
+		);
+
+		const clip = makeClip(
+			{ kind: "image", isParent: asParent, locator: { surface: { kind: "epub-section", index } } },
+			{ documentId: this.file.path },
+			assetPath,
+		);
+
+		await this.writeClip(clip, index);
+	}
+
 	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
 		await this.commitImage(pageNumber, rect, asParent);
 	}
 
 	private async clipWholePage(asParent = false): Promise<void> {
+		if (this.epub) {
+			// A section is not a page — SOURCES.md decision K. Saying so beats inventing a
+			// multi-megabyte image of a whole chapter.
+			new Notice("Reader: a section has no page to clip. Select text, or press r for a figure.");
+			return;
+		}
 		const current = this.doc?.view.surface ?? 1;
 		await this.commitImage(current, WHOLE_SURFACE, asParent);
 	}
@@ -842,11 +1067,30 @@ export class ReaderView extends TextFileView {
 			}
 
 			const clip = makeClip(request, { documentId: file.path }, assetPath);
+			await this.writeClip(clip, request.locator.surface.index);
+		} catch (error) {
+			this.deps.log.error("could not save the clip", error);
+			const message = error instanceof Error ? error.message : "The clip could not be saved.";
+			new Notice(`Reader: ${message}`, 10_000);
+		}
+	}
 
+	/**
+	 * Put a finished clip into the note, record its mark, and take the cursor there.
+	 *
+	 * Shared by every capture path, because the note format, the ordering and the parent rules
+	 * are properties of a clip rather than of the thing it came from — and a second copy of
+	 * this is how the two write paths in v1 drifted apart.
+	 */
+	private async writeClip(clip: Clip, index: number): Promise<void> {
+		const doc = this.doc;
+		if (!doc) return;
+
+		try {
 			// Page order, not capture order: you clip a figure on page 12 and then go back for
 			// the definition on page 3, and the note should still read straight through.
 			const position = await appendClip(this.app, doc.notePath, clip, {
-				sections: this.sectionsFor(request.locator.surface.index),
+				sections: this.sectionsFor(index),
 				positionAt: (blockId) => {
 					const parents = new Set((doc.parents ?? []).map((id) => id.toLowerCase()));
 					for (const [id, locator] of Object.entries(doc.clips)) {
@@ -859,7 +1103,7 @@ export class ReaderView extends TextFileView {
 			doc.clips[clip.id] = clip.locator;
 			if (clip.isParent) doc.parents = [...(doc.parents ?? []), clip.id];
 			this.requestSave();
-			this.drawMarks(request.locator.surface.index);
+			this.drawMarks(index);
 
 			await this.revealNote(position);
 		} catch (error) {
@@ -882,7 +1126,12 @@ export class ReaderView extends TextFileView {
 		return sectionsForPage(usable as Section[], page);
 	}
 
-	private async writeAsset(basename: string, pageNumber: number, png: Uint8Array): Promise<string> {
+	private async writeAsset(
+		basename: string,
+		pageNumber: number,
+		bytes: Uint8Array,
+		extension = "png",
+	): Promise<string> {
 		const folder = `${this.deps.assetsFolder}/${sanitise(basename)}`;
 		if (!this.app.vault.getAbstractFileByPath(folder)) {
 			await this.app.vault.createFolder(folder).catch(() => {
@@ -891,8 +1140,8 @@ export class ReaderView extends TextFileView {
 		}
 
 		const stamp = Date.now().toString(36);
-		const path = `${folder}/p${pageNumber}-${stamp}.png`;
-		await this.app.vault.createBinary(path, toArrayBuffer(png));
+		const path = `${folder}/p${pageNumber}-${stamp}.${extension}`;
+		await this.app.vault.createBinary(path, toArrayBuffer(bytes));
 		return path;
 	}
 
@@ -935,6 +1184,13 @@ export class ReaderView extends TextFileView {
 /** Vault paths reject these outright, and a colon silently breaks on Windows. */
 function sanitise(name: string): string {
 	return name.replace(/[\\/:*?"<>|#^[\]]/g, "-").trim() || "document";
+}
+
+/** A path's extension, lowercased, defaulting to png when it has none. */
+function extensionOf(path: string): string {
+	const name = path.split("/").pop() ?? "";
+	const at = name.lastIndexOf(".");
+	return at === -1 ? "png" : name.slice(at + 1).toLowerCase();
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
