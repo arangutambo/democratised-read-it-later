@@ -224,3 +224,19 @@ export class Setting {
 		return this;
 	}
 }
+
+/** Enough of `Modal` for the clip picker to be constructed and torn down in a test. */
+export class Modal {
+	contentEl = {
+		empty: (): void => {},
+		createEl: (): unknown => ({}),
+		createDiv: (): unknown => ({}),
+	} as unknown as HTMLElement;
+
+	constructor(public app: App) {}
+
+	open(): void {}
+	close(): void {}
+	onOpen(): void {}
+	onClose(): void {}
+}

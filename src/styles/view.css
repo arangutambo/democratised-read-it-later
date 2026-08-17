@@ -146,3 +146,23 @@
 	width: 0;
 	overflow: hidden;
 }
+
+/* The clip picker. A workbook accumulates clips over weeks; the drawing is for tonight's six. */
+.reader-clip-list {
+	max-height: 50vh;
+	overflow-y: auto;
+	margin-bottom: var(--size-4-2);
+}
+
+.reader-clip-list .setting-item {
+	padding: var(--size-2-2) 0;
+	border-top: none;
+}
+
+.reader-clip-list .setting-item-description {
+	/* A clip's label is a filename or a sentence; neither should push the toggle off-screen. */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 28em;
+}

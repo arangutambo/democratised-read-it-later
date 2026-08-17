@@ -2,6 +2,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile } from "obsidian";
 
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
+import { findExcalidraw } from "./excalidraw/handoff";
 import { isReadable } from "./reader/open";
 import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
 import { readerSkin } from "./render/reader-skin";
@@ -142,6 +143,93 @@ export default class ReaderPlugin extends Plugin {
 				return true;
 			},
 		});
+
+		this.addCommand({
+			id: "send-clips-to-excalidraw",
+			name: "Send clips from this note to Excalidraw",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== "md") return false;
+				// Absent rather than broken when Excalidraw is not installed.
+				if (!findExcalidraw(this.app)) return false;
+				if (!checking) void this.sendClipsToExcalidraw(file);
+				return true;
+			},
+		});
+	}
+
+	/**
+	 * Tick clips in this note, and send them to its drawing.
+	 *
+	 * Excalidraw is downstream of Reader: Reader selects, Excalidraw draws. The clips arrive
+	 * locked and framed so a pen stroke cannot drag a question sideways mid-solution.
+	 */
+	private async sendClipsToExcalidraw(note: TFile): Promise<void> {
+		const ea = findExcalidraw(this.app);
+		if (!ea) {
+			new Notice("Reader: Excalidraw is not available.");
+			return;
+		}
+
+		try {
+			const { parseClips } = await import("./note/parse");
+			const { ClipPicker } = await import("./excalidraw/picker");
+			const { drawingPathFor, sendToExcalidraw } = await import("./excalidraw/handoff");
+
+			const body = await this.app.vault.read(note);
+			const images = parseClips(body).filter((clip) => clip.kind === "image");
+
+			// The page each clip came from, for the frame labels. `.reader` is the only place
+			// that knows, which is why it exists.
+			const pages = await this.readerPagesFor(note);
+
+			new ClipPicker(
+				this.app,
+				images.map((clip) => ({ ...clip, page: pages.get(clip.id) })),
+				(assets, labels) => {
+					if (assets.length === 0) return;
+					void (async () => {
+						try {
+							const result = await sendToExcalidraw(this.app, {
+								assets,
+								labels,
+								drawingPath: drawingPathFor(note.path),
+								ea,
+							});
+							new Notice(
+								`Reader: sent ${result.sent} clip(s) to ${result.created ? "a new drawing" : "the drawing"}.`,
+							);
+						} catch (error) {
+							this.log.error("could not send clips to Excalidraw", error);
+							const message = error instanceof Error ? error.message : "The handoff failed.";
+							new Notice(`Reader: ${message}`, 10_000);
+						}
+					})();
+				},
+			).open();
+		} catch (error) {
+			this.log.error("could not prepare the Excalidraw handoff", error);
+			new Notice("Reader: could not read this note's clips — check the console.");
+		}
+	}
+
+	/** Clip id → page, from the `.reader` beside this note. Empty when there is none. */
+	private async readerPagesFor(note: TFile): Promise<Map<string, number>> {
+		const out = new Map<string, number>();
+		const readerPath = note.path.replace(/\.md$/, ".reader");
+		const file = this.app.vault.getAbstractFileByPath(readerPath);
+		if (!(file instanceof TFile)) return out;
+
+		try {
+			const { parseDocument } = await import("./reader/document");
+			const { document } = parseDocument(await this.app.vault.read(file));
+			for (const [id, locator] of Object.entries(document.clips)) {
+				out.set(id.toLowerCase(), locator.surface.index);
+			}
+		} catch {
+			// A missing or unreadable sidecar costs labels, never the handoff itself.
+		}
+		return out;
 	}
 
 	/** Create the `.reader` + `.md` pair for a PDF and open it. */
