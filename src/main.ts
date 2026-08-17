@@ -87,6 +87,12 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "import-readwise",
+			name: "Import from a Readwise export",
+			callback: () => void this.importReadwise(),
+		});
+
+		this.addCommand({
 			id: "import-apple-books",
 			name: "Import highlights from Apple Books",
 			checkCallback: (checking) => {
@@ -461,6 +467,33 @@ export default class ReaderPlugin extends Plugin {
 			this.log.error("could not toggle reader frontmatter", error);
 			new Notice("Reader: could not update this note's frontmatter — check the console.");
 		}
+	}
+
+	/**
+	 * The way out of Readwise.
+	 *
+	 * A dialog rather than a straight run: a real library is ~2,100 documents and about a
+	 * gigabyte of files, which is not something to start from the command palette and find out
+	 * about afterwards. The modal shows exactly what would be written before anything is.
+	 */
+	private async importReadwise(): Promise<void> {
+		if (!this.settings.features.readwiseImport) {
+			new Notice("Reader: enable the Readwise import in settings first.");
+			return;
+		}
+
+		const { ReadwiseImportModal } = await import("./sources/readwise/modal");
+
+		new ReadwiseImportModal(this.app, {
+			sourcesFolder: this.settings.sourcesFolder,
+			documentsFolder: this.settings.decksFolder,
+			onDone: (summary) => {
+				for (const failure of summary.failures) {
+					this.log.warn(`Readwise import: ${failure.title} — ${failure.reason}`);
+				}
+				void this.refreshLibrary();
+			},
+		}).open();
 	}
 
 	private async importAppleBooks(): Promise<void> {

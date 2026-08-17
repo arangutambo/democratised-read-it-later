@@ -32,6 +32,7 @@ export interface FeatureFlags {
 	reader: boolean;
 	readerSkin: boolean;
 	booksImport: boolean;
+	readwiseImport: boolean;
 	webClip: boolean;
 	zotero: boolean;
 	ai: boolean;
@@ -44,6 +45,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>
 	"reader",
 	"readerSkin",
 	"booksImport",
+	"readwiseImport",
 	"zotero",
 ]);
 
@@ -65,6 +67,12 @@ export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: str
 	webClip: {
 		name: "Web clipping",
 		description: "Receive clipped articles from the Safari extension.",
+	},
+	readwiseImport: {
+		name: "Readwise import",
+		description:
+			"Turn a Readwise export — the CSV and the uploaded-files zip — into notes you own, " +
+			"with the PDFs and EPUBs openable in Reader. No token, no live subscription.",
 	},
 	zotero: {
 		name: "Zotero",
@@ -131,6 +139,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 		reader: true,
 		readerSkin: true,
 		booksImport: true,
+		readwiseImport: true,
 		webClip: false,
 		zotero: true,
 		ai: false,
