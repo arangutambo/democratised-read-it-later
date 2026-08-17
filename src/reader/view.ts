@@ -32,6 +32,8 @@ import {
 } from "./render/page-element";
 import { PageWindow } from "./render/virtualiser";
 import { EpubSurface } from "../epub/surface";
+import { WebSurface } from "../web/surface";
+import { BLOCKED_IMAGE_CLASS } from "../web/sanitise";
 import { PdfSurface, type OutlineEntry } from "./surface/pdf";
 import {
 	createDocument,
@@ -69,6 +71,7 @@ export class ReaderView extends TextFileView {
 	 */
 	private surface?: PdfSurface;
 	private epub?: EpubSurface;
+	private web?: WebSurface;
 	/** Releases the object URLs of sections currently rendered. */
 	private readonly sectionReleases = new Map<number, () => void>();
 	private window?: PageWindow;
@@ -151,6 +154,10 @@ export class ReaderView extends TextFileView {
 		const epub = this.epub;
 		this.epub = undefined;
 		void epub?.close();
+
+		const web = this.web;
+		this.web = undefined;
+		void web?.close();
 
 		this.doc = undefined;
 		this.scroller?.replaceChildren();
@@ -361,6 +368,28 @@ export class ReaderView extends TextFileView {
 				this.goToPage(document.view.surface, "auto");
 				this.watchNote();
 				this.setStatus(`${epub.count} sections · q quote · r figure · shift = parent`);
+				return;
+			}
+
+			if (document.source.kind === "html") {
+				/*
+				 * Decoded as UTF-8 rather than read as text, because `readSource` also reaches
+				 * files outside the vault and returns bytes for every kind.
+				 */
+				const web = WebSurface.open(new TextDecoder().decode(bytes), this.contentEl.doc);
+				if (token !== this.loadToken) return;
+
+				this.web = web;
+				this.doc = document;
+				this.doc = await this.reconcileWithNote(document);
+				this.window = new PageWindow({ total: web.count, budget: this.deps.pageBudget });
+				if (this.file) this.deps.onPageCount?.(this.file.path, web.count);
+
+				await this.buildPages(web.count, 1.4);
+				this.buildOutlineFrom(web.outline());
+				this.goToPage(document.view.surface, "auto");
+				this.watchNote();
+				this.setStatus(this.articleStatus());
 				return;
 			}
 
@@ -617,6 +646,29 @@ export class ReaderView extends TextFileView {
 		const page = this.pages.get(pageNumber);
 		if (!page) return;
 
+		if (this.web) {
+			const { element } = this.web.renderSection(pageNumber);
+			if (signal.aborted) return;
+
+			/*
+			 * Each blocked image is its own switch.
+			 *
+			 * Listeners go on the placeholders themselves rather than on the scroller: they are
+			 * replaced wholesale on every re-render, so there is nothing to accumulate and no
+			 * second registration when a document is reopened in the same view.
+			 */
+			for (const placeholder of Array.from(element.querySelectorAll(`.${BLOCKED_IMAGE_CLASS}`))) {
+				placeholder.addEventListener("click", () => this.loadArticleImages());
+			}
+
+			page.canvasHost.replaceChildren(...Array.from(element.childNodes));
+			// A section is as tall as its text; a fixed ratio would clip or pad it.
+			page.root.style.aspectRatio = "";
+			page.root.addClass("is-section");
+			this.drawMarks(pageNumber);
+			return;
+		}
+
 		if (this.epub) {
 			try {
 				const { element, release } = await this.epub.renderSection(pageNumber);
@@ -698,7 +750,13 @@ export class ReaderView extends TextFileView {
 				break;
 			case "r":
 				event.preventDefault();
-				if (this.epub) {
+				if (this.web) {
+					/*
+					 * An article's figures live on someone else's server, so there is no local
+					 * original to take and nothing to crop — see SOURCES.md decision K.
+					 */
+					new Notice("Reader: an article has no figure file to clip. Select text to quote it.");
+				} else if (this.epub) {
 					// There is no page to crop. `r` takes the figure under the pointer instead.
 					this.armFigure(asParent);
 				} else {
@@ -858,7 +916,7 @@ export class ReaderView extends TextFileView {
 
 		// A section is already a DOM, so the selection is the text — no layer to reconcile, and
 		// the structure comes from real headings and lists rather than being inferred.
-		if (this.epub) return this.clipEpubSelection(asParent);
+		if (this.epub || this.web) return this.clipSectionSelection(asParent);
 
 		const selection = activeWindow.getSelection();
 		const pageEl = selection?.anchorNode
@@ -914,7 +972,13 @@ export class ReaderView extends TextFileView {
 	 * The text is exactly what the browser reports, because the markup is the book's own — none
 	 * of the geometry reconstruction a PDF needs, and none of its failure modes.
 	 */
-	private async clipEpubSelection(asParent: boolean): Promise<void> {
+	/**
+	 * A quote from a section, for the sources whose text is already a DOM.
+	 *
+	 * Shared by EPUB and web because for both the selection *is* the text: there is no
+	 * invisible layer to reconcile it against, which is the whole of the PDF path's difficulty.
+	 */
+	private async clipSectionSelection(asParent: boolean): Promise<void> {
 		const selection = activeWindow.getSelection();
 		const text = (selection?.toString() ?? "").replace(/\s+/g, " ").trim();
 
@@ -930,7 +994,7 @@ export class ReaderView extends TextFileView {
 		if (!pageEl || !Number.isFinite(index)) return;
 
 		const rect = this.selectionRectWithin(selection, pageEl);
-		const context = this.epub ? await this.epub.sectionText(index) : "";
+		const context = this.epub ? await this.epub.sectionText(index) : (this.web?.sectionText(index) ?? "");
 		const at = context.indexOf(text);
 
 		await this.commit({
@@ -938,7 +1002,7 @@ export class ReaderView extends TextFileView {
 			text,
 			isParent: asParent,
 			locator: {
-				surface: { kind: "epub-section", index },
+				surface: { kind: this.web ? "html-article" : "epub-section", index },
 				...(rect ? { rect } : {}),
 				quote: {
 					exact: text,
@@ -1015,6 +1079,39 @@ export class ReaderView extends TextFileView {
 		await this.writeClip(clip, index);
 	}
 
+	/**
+	 * The status line for an article.
+	 *
+	 * It says whether pictures are being fetched, because that is the one thing about reading a
+	 * saved article that reaches off this machine, and it should never be a surprise.
+	 */
+	private articleStatus(): string {
+		const web = this.web;
+		if (!web) return "";
+
+		const parts = [`${web.count} section${web.count === 1 ? "" : "s"}`, "q quote", "shift = parent"];
+
+		if (web.hasRemoteImages) {
+			parts.push(web.imagesLoaded ? "images loaded" : "click a placeholder to load images");
+		}
+
+		return parts.join(" · ");
+	}
+
+	/**
+	 * Start fetching this article's images, and redraw so they appear.
+	 *
+	 * For this document, in this session — reopening starts blocked again. The reason to block
+	 * was never about this particular page, so consenting once is not consenting always.
+	 */
+	private loadArticleImages(): void {
+		if (!this.web || this.web.imagesLoaded) return;
+
+		this.web.loadImages();
+		this.setStatus(this.articleStatus());
+		void this.rerenderVisible();
+	}
+
 	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
 		await this.commitImage(pageNumber, rect, asParent);
 	}
@@ -1024,6 +1121,10 @@ export class ReaderView extends TextFileView {
 			// A section is not a page — SOURCES.md decision K. Saying so beats inventing a
 			// multi-megabyte image of a whole chapter.
 			new Notice("Reader: a section has no page to clip. Select text, or press r for a figure.");
+			return;
+		}
+		if (this.web) {
+			new Notice("Reader: an article has no page to clip. Select text to quote it.");
 			return;
 		}
 		const current = this.doc?.view.surface ?? 1;

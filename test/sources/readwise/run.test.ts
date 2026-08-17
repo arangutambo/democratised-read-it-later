@@ -260,11 +260,23 @@ describe("runImport with the uploaded files", () => {
 		expect(vault.files.get("Sources/Wild Mushrooming (01h).md")).toContain("Open in Reader");
 	});
 
-	it("copies an HTML file without pretending Reader can open it", async () => {
-		// Web articles are M9; a .reader here would open a view showing nothing.
+	it("pairs an HTML article with a .reader", async () => {
+		// The case that decides whether an import is worth running: 5,479 of 5,524 files.
 		const summary = await runImport(app, {
 			csv: ONE,
 			zip: zipWith("Wild Mushrooming (01h).html", "<h1>hi</h1>"),
+			...FOLDERS,
+		});
+
+		expect(summary.documents).toBe(1);
+		expect(summary.readers).toBe(1);
+		expect(vault.files.get("Sources/Wild Mushrooming (01h).md")).toContain("Open in Reader");
+	});
+
+	it("still writes a link-only note for a format Reader cannot render", async () => {
+		const summary = await runImport(app, {
+			csv: ONE,
+			zip: zipWith("Wild Mushrooming (01h).docx", "not a document"),
 			...FOLDERS,
 		});
 

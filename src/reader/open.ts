@@ -134,6 +134,9 @@ export function kindOf(file: TFile): SourceKind | undefined {
 			return "pdf";
 		case "epub":
 			return "epub";
+		case "html":
+		case "htm":
+			return "html";
 		default:
 			return undefined;
 	}

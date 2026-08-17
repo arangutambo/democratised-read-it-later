@@ -132,14 +132,20 @@ describe("extensionOf", () => {
 });
 
 describe("readableExtension", () => {
-	it("recognises what Reader can already open", () => {
+	it("recognises what Reader can open", () => {
 		expect(readableExtension("pdf")).toBe("pdf");
 		expect(readableExtension("epub")).toBe("epub");
 	});
 
-	it("does not claim HTML yet", () => {
-		// 5,479 of 5,524 exported files are HTML, and web articles are M9. Offering a reader
-		// that shows nothing would be worse than a note with a link.
-		expect(readableExtension("html")).toBeUndefined();
+	it("claims HTML, which is the bulk of an export", () => {
+		// 5,479 of 5,524 exported files. Without these an import is 44 documents and 2,000
+		// links, which is not worth running.
+		expect(readableExtension("html")).toBe("html");
+		expect(readableExtension("htm")).toBe("html");
+	});
+
+	it("still refuses what Reader cannot render", () => {
+		expect(readableExtension("docx")).toBeUndefined();
+		expect(readableExtension("")).toBeUndefined();
 	});
 });

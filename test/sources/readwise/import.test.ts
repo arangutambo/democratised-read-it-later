@@ -45,12 +45,20 @@ describe("planImport", () => {
 		expect(plan.linkOnly).toBe(0);
 	});
 
-	it("copies an HTML file but does not pretend Reader can open it", () => {
-		// 5,479 of 5,524 exported files are HTML and web articles are M9. Offering a reader
-		// that renders nothing would be worse than a note with a link.
+	it("pairs an HTML article with a .reader", () => {
+		// 5,479 of 5,524 exported files are HTML, so this is the case that decides whether an
+		// import is worth running at all.
 		const plan = planImport([doc()], { ...FOLDERS, zipEntries: ["Wild Mushrooming (01h).html"] });
 
 		expect(plan.writes[0].documentPath).toBe("Sources/_documents/Wild Mushrooming (01h).html");
+		expect(plan.writes[0].readerPath).toBe("Sources/_documents/Wild Mushrooming (01h).reader");
+		expect(plan.linkOnly).toBe(0);
+	});
+
+	it("still refuses a format Reader cannot render", () => {
+		const plan = planImport([doc()], { ...FOLDERS, zipEntries: ["Wild Mushrooming (01h).docx"] });
+
+		expect(plan.writes[0].documentPath).toBe("Sources/_documents/Wild Mushrooming (01h).docx");
 		expect(plan.writes[0].readerPath).toBeUndefined();
 		expect(plan.linkOnly).toBe(1);
 	});

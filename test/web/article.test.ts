@@ -250,3 +250,41 @@ describe("seeing through wrappers", () => {
 		expect(parseArticle(transcript, parse).sections).toHaveLength(1);
 	});
 });
+
+describe("sectionText", () => {
+	it("does not fuse words across block boundaries", () => {
+		/*
+		 * `textContent` concatenates without regard for layout, so a heading followed by a
+		 * paragraph came back as `FirstOne.` — one word where there were two. This string is a
+		 * quote's prefix and suffix and the corpus search matches against, so a fused word means
+		 * an anchor that cannot be found. The same bug had to be fixed once for PDF line joins.
+		 */
+		const article = parseArticle("<h2>First</h2><p>One.</p>", parse);
+		expect(sectionText(article.sections[0])).toBe("First One.");
+	});
+
+	it("separates list items", () => {
+		const article = parseArticle("<ul><li>alpha</li><li>beta</li></ul>", parse);
+		expect(sectionText(article.sections[0])).toBe("alpha beta");
+	});
+
+	it("separates table cells", () => {
+		const article = parseArticle("<table><tr><td>left</td><td>right</td></tr></table>", parse);
+		expect(sectionText(article.sections[0])).toBe("left right");
+	});
+
+	it("breaks a line at <br>", () => {
+		expect(sectionText(parseArticle("<p>one<br>two</p>", parse).sections[0])).toBe("one two");
+	});
+
+	it("does not insert a space inside a styled word", () => {
+		// Inline elements are not boundaries; splitting there would be the opposite bug.
+		expect(sectionText(parseArticle("<p>anti<em>dis</em>establishment</p>", parse).sections[0])).toBe(
+			"antidisestablishment",
+		);
+	});
+
+	it("collapses the whitespace it introduces", () => {
+		expect(sectionText(parseArticle("<div><p>a</p><p>b</p></div>", parse).sections[0])).toBe("a b");
+	});
+});

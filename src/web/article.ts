@@ -150,9 +150,40 @@ function sectionsOf(doc: Document, root: Element): ArticleSection[] {
 	return sections.length > 0 ? sections : [start()];
 }
 
+/**
+ * Elements that end a run of text.
+ *
+ * `textContent` concatenates without regard for layout, so `<h2>First</h2><p>One.</p>` comes
+ * back as `FirstOne.` — two words fused into one. That matters here rather than being untidy:
+ * this string is a quote's prefix and suffix and the corpus that search matches against, so a
+ * fused word makes an anchor that cannot be found and a search that misses. The same class of
+ * bug already had to be fixed once for PDF line joins.
+ */
+const BLOCK = new Set([
+	"address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption",
+	"figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "ol",
+	"p", "pre", "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+]);
+
 /** A section's plain text, for search and for a quote's surrounding context. */
 export function sectionText(section: ArticleSection): string {
-	return (section.body.textContent ?? "").replace(/\s+/g, " ").trim();
+	const parts: string[] = [];
+
+	const walk = (node: Node): void => {
+		if (node.nodeType === 3) {
+			parts.push(node.nodeValue ?? "");
+			return;
+		}
+		if (node.nodeType !== 1) return;
+
+		const block = BLOCK.has((node as Element).tagName.toLowerCase());
+		if (block) parts.push(" ");
+		for (const child of Array.from(node.childNodes)) walk(child);
+		if (block) parts.push(" ");
+	};
+
+	walk(section.body);
+	return parts.join("").replace(/\s+/g, " ").trim();
 }
 
 /** The outline, as the reader's table of contents wants it. */

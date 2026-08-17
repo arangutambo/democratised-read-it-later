@@ -111,12 +111,12 @@ export function extensionOf(filename: string): string {
 /**
  * Whether Reader can open this kind of exported file.
  *
- * The export is overwhelmingly HTML — 5,479 of 5,524 files — and web articles are M9. Until
- * then a PDF or an EPUB gets a readable pair and everything else gets a note with a link,
- * which is honest rather than offering a reader that shows nothing.
+ * HTML is the bulk of an export — 5,479 of 5,524 files — and is now readable, which is what
+ * makes the import worth running: without it an export is 44 documents and 2,000 links.
  */
-export function readableExtension(extension: string): "pdf" | "epub" | undefined {
+export function readableExtension(extension: string): "pdf" | "epub" | "html" | undefined {
 	if (extension === "pdf") return "pdf";
 	if (extension === "epub") return "epub";
+	if (extension === "html" || extension === "htm") return "html";
 	return undefined;
 }

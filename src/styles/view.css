@@ -554,3 +554,38 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 }
+
+/*
+ * An image that has not been fetched.
+ *
+ * Every image in a saved article lives on someone else's server, so rendering one is a network
+ * request. This is what stands in until you ask for it: it names the host, so the choice is
+ * informed rather than a blank gap you click on faith.
+ */
+.reader-remote-image {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	padding: var(--size-2-1) var(--size-2-3);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	user-select: none;
+}
+
+.reader-remote-image::before {
+	content: "🖼";
+}
+
+.reader-remote-image:hover {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+}
+
+.reader-page.is-section .reader-remote-image {
+	margin: var(--size-4-2) auto;
+	display: flex;
+	justify-content: center;
+}
