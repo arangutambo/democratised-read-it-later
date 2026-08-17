@@ -15,7 +15,8 @@
 		"slides:dry-run": "esbuild tools/slides-dry-run.ts --bundle --platform=node --format=cjs --outfile=.slides.cjs --log-level=error && node .slides.cjs",
 		"zotero:dry-run": "esbuild tools/zotero-dry-run.ts --bundle --platform=node --format=cjs --outfile=.zot.cjs --log-level=error && node .zot.cjs",
 		"pdf:dry-run": "esbuild tools/pdf-dry-run.ts --bundle --platform=node --format=cjs --outfile=.pdf.cjs --log-level=error && node .pdf.cjs",
-		"epub:fixture": "esbuild tools/make-epub-fixture.ts --bundle --platform=node --format=cjs --outfile=.epub.cjs --log-level=error && node .epub.cjs && rm -f .epub.cjs"
+		"epub:fixture": "esbuild tools/make-epub-fixture.ts --bundle --platform=node --format=cjs --outfile=.epub.cjs --log-level=error && node .epub.cjs && rm -f .epub.cjs",
+		"web:dry-run": "esbuild tools/web-dry-run.ts --bundle --platform=node --format=cjs --outfile=.web.cjs --log-level=error --external:happy-dom && node --max-old-space-size=4096 .web.cjs"
 	},
 	"keywords": [],
 	"license": "MIT",

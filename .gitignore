@@ -5,6 +5,9 @@ main.js
 styles.css
 *.js.map
 
+# Dry-run bundles — esbuild scratch output from the tools/ scripts.
+.*.cjs
+
 # Local plugin data, never shared.
 data.json
 

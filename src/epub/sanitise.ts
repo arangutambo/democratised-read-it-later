@@ -43,6 +43,18 @@ export interface SanitiseOptions {
 	 * Returning undefined drops the image, which is right for a src that escapes the archive.
 	 */
 	resolveImage(src: string): string | undefined;
+	/**
+	 * What to do with an image hosted somewhere else.
+	 *
+	 * A book's figures are inside the archive, so for an EPUB a remote src is either a mistake
+	 * or a tracking pixel and the default — drop it — is right. A saved web article is the
+	 * opposite: its images are *all* remote, and dropping them silently guts the page. That
+	 * caller passes a hook returning a placeholder element to stand in for the image, so
+	 * nothing is fetched until someone asks for it.
+	 *
+	 * Returning undefined drops the image, which is the default.
+	 */
+	remoteImage?(src: string, doc: Document): Element | undefined;
 }
 
 /**
@@ -96,10 +108,12 @@ function unwrap(node: Element): void {
 function rewriteImage(img: HTMLImageElement, options: SanitiseOptions): void {
 	const src = img.getAttribute("src") ?? "";
 
-	// A remote image would phone home the moment a page rendered, telling a publisher when and
-	// where the book was read. Only what is inside the archive is loaded.
+	// A remote image would phone home the moment a page rendered, telling whoever hosts it when
+	// and where this was read. Nothing off-archive is fetched without being asked for.
 	if (/^[a-z][a-z0-9+.-]*:/i.test(src) && !src.startsWith("data:")) {
-		img.remove();
+		const placeholder = options.remoteImage?.(src, img.ownerDocument);
+		if (placeholder) img.replaceWith(placeholder);
+		else img.remove();
 		return;
 	}
 
