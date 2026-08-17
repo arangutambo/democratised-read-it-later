@@ -388,3 +388,128 @@ describe("sorting around multi-line quotes", () => {
 		expect(out.indexOf("heading")).toBeLessThan(out.indexOf("later page"));
 	});
 });
+
+/**
+ * Parents, and why their scope runs by position rather than by page.
+ *
+ * A parent owns everything from its own position until the next parent. In a prose PDF a
+ * section's material routinely starts partway down the page before its heading and ends
+ * partway down the page after — so "the parent on this page" is the wrong rule.
+ */
+describe("parents", () => {
+	function clipAt(id: string, page: number, top: number, text: string, isParent = false): Clip {
+		return quoteClip(text, {
+			id,
+			...(isParent ? { isParent: true } : {}),
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [0.1, top, 0.2, 0.05] },
+		});
+	}
+
+	/** `.reader` reporting positions and which clips are parents. */
+	function positions(map: Record<string, [page: number, top: number, parent?: boolean]>) {
+		return (id: string) => {
+			const entry = map[id];
+			if (!entry) return undefined;
+			const [page, top, parent] = entry;
+			return { page, top, left: 0.1, ...(parent ? { isParent: true } : {}) };
+		};
+	}
+
+	it("nests a clip under the parent that precedes it", () => {
+		const body = renderBullet(clipAt("AAA", 2, 0.1, "Section one", true)) + "\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			clipAt("BBB", 2, 0.5, "a detail"),
+			positions({ aaa: [2, 0.1, true] }),
+		);
+
+		expect(out).toContain("- > Section one");
+		expect(out).toContain("\t- > a detail");
+	});
+
+	it("keeps a parent itself at the top level", () => {
+		const body = renderBullet(clipAt("AAA", 2, 0.1, "Section one", true)) + "\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			clipAt("BBB", 5, 0.1, "Section two", true),
+			positions({ aaa: [2, 0.1, true] }),
+		);
+
+		expect(out).toContain("- > Section two");
+		expect(out).not.toContain("\t- > Section two");
+	});
+
+	it("puts a clip from an earlier page above the parent, and does not nest it", () => {
+		// The rule you asked for: position ordering wins, and an earlier clip belongs to
+		// whatever preceded it — here, nothing.
+		const body = renderBullet(clipAt("AAA", 5, 0.1, "Section one", true)) + "\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			clipAt("BBB", 2, 0.1, "earlier material"),
+			positions({ aaa: [5, 0.1, true] }),
+		);
+
+		expect(out.indexOf("earlier material")).toBeLessThan(out.indexOf("Section one"));
+		expect(out).toContain("- > earlier material");
+		expect(out).not.toContain("\t- > earlier material");
+	});
+
+	it("gives material above a later parent to the earlier one", () => {
+		/*
+		 * The case from a prose PDF: a section heading appears partway down page 5, and the
+		 * material above it on that page still belongs to the section that began on page 2.
+		 */
+		let body = renderBullet(clipAt("AAA", 2, 0.2, "Section one", true)) + "\n";
+		body = insertBulletInPageOrder(
+			body,
+			clipAt("BBB", 5, 0.8, "Section two", true),
+			positions({ aaa: [2, 0.2, true] }),
+		).body;
+
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			clipAt("CCC", 5, 0.3, "above the second heading"),
+			positions({ aaa: [2, 0.2, true], bbb: [5, 0.8, true] }),
+		);
+
+		const lines = out.split("\n");
+		const at = lines.findIndex((l) => l.includes("above the second heading"));
+
+		expect(lines[at].startsWith("\t- ")).toBe(true);
+		expect(out.indexOf("above the second heading")).toBeLessThan(out.indexOf("Section two"));
+	});
+
+	it("supports several parents in one document", () => {
+		let body = renderBullet(clipAt("AAA", 1, 0.1, "One", true)) + "\n";
+		const known: Record<string, [number, number, boolean?]> = { aaa: [1, 0.1, true] };
+
+		for (const [id, page] of [["BBB", 4], ["CCC", 8]] as const) {
+			body = insertBulletInPageOrder(body, clipAt(id, page, 0.1, `Parent ${page}`, true), positions(known)).body;
+			known[id.toLowerCase()] = [page, 0.1, true];
+		}
+
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			clipAt("DDD", 6, 0.1, "under the second"),
+			positions(known),
+		);
+
+		const lines = out.split("\n");
+		const at = lines.findIndex((l) => l.includes("under the second"));
+
+		expect(lines[at].startsWith("\t- ")).toBe(true);
+		expect(out.indexOf("Parent 4")).toBeLessThan(out.indexOf("under the second"));
+		expect(out.indexOf("under the second")).toBeLessThan(out.indexOf("Parent 8"));
+	});
+
+	it("puts a child's writing line one level deeper again", () => {
+		const body = renderBullet(clipAt("AAA", 2, 0.1, "Section one", true)) + "\n";
+		const { body: out, line } = insertBulletInPageOrder(
+			body,
+			clipAt("BBB", 2, 0.5, "a detail"),
+			positions({ aaa: [2, 0.1, true] }),
+		);
+
+		expect(out.split("\n")[line]).toBe("\t\t- ");
+	});
+});

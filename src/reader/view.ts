@@ -66,6 +66,8 @@ export class ReaderView extends TextFileView {
 	private renderAbort?: AbortController;
 
 	private mode: Mode = "read";
+	/** Whether the armed region will become a parent. */
+	private pendingParent = false;
 	/** Removes the document-level Escape listener while a region is armed. */
 	private escapeHandler?: () => void;
 	/** Guards against a second load starting while the first is still opening a document. */
@@ -216,7 +218,7 @@ export class ReaderView extends TextFileView {
 
 			await this.buildPages();
 			this.watchNote();
-			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page`);
+			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page · shift = parent`);
 		} catch (error) {
 			this.deps.log.error("could not open the document", error);
 			const message = error instanceof Error ? error.message : "Could not open this document.";
@@ -429,27 +431,40 @@ export class ReaderView extends TextFileView {
 		// Never steal a key from a text field, and never fight a modifier chord.
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
 
+		/*
+		 * Shift makes the clip a **parent**: everything clipped after it, up to the next
+		 * parent, nests beneath it. Scope runs by position rather than by page, because in a
+		 * prose PDF a section's material routinely starts partway down the page before its
+		 * heading and ends partway down the page after.
+		 */
+		const asParent = event.shiftKey;
+
 		switch (event.key.toLowerCase()) {
 			case "q":
 				event.preventDefault();
-				void this.clipSelection();
+				void this.clipSelection(asParent);
 				break;
 			case "r":
 				event.preventDefault();
-				this.armRegion();
+				this.armRegion(asParent);
 				break;
 			case "p":
 				event.preventDefault();
-				void this.clipWholePage();
+				void this.clipWholePage(asParent);
 				break;
 			// Escape is handled on the document while armed — see armRegion().
 		}
 	}
 
-	private armRegion(): void {
+	private armRegion(asParent = false): void {
+		this.pendingParent = asParent;
 		this.mode = "arming-region";
 		this.scroller.addClass("is-arming-region");
-		this.setStatus("Drag a box around what you want. Escape to cancel.");
+		this.setStatus(
+			asParent
+				? "Drag a box around the parent. Everything after it nests underneath. Escape to cancel."
+				: "Drag a box around what you want. Escape to cancel.",
+		);
 
 		/*
 		 * Escape has to be caught on the document, not on the view.
@@ -473,10 +488,11 @@ export class ReaderView extends TextFileView {
 
 	private disarmRegion(): void {
 		this.mode = "read";
+		this.pendingParent = false;
 		this.escapeHandler?.();
 		this.escapeHandler = undefined;
 		this.scroller.removeClass("is-arming-region");
-		this.setStatus(`${this.surface?.pageCount ?? 0} pages · q quote · r region · p page`);
+		this.setStatus(`${this.surface?.pageCount ?? 0} pages · q quote · r region · p page · shift = parent`);
 	}
 
 	private onMouseDown(event: MouseEvent): void {
@@ -515,8 +531,9 @@ export class ReaderView extends TextFileView {
 				rect.height,
 			);
 
+			const asParent = this.pendingParent;
 			this.disarmRegion();
-			void this.clipRegion(pageNumber, normalised);
+			void this.clipRegion(pageNumber, normalised, asParent);
 		};
 
 		// Listeners live on the document so a drag that leaves the page still completes, and
@@ -527,7 +544,7 @@ export class ReaderView extends TextFileView {
 
 	// ------------------------------------------------------------------------- clipping
 
-	private async clipSelection(): Promise<void> {
+	private async clipSelection(asParent = false): Promise<void> {
 		const doc = this.doc;
 		if (!doc) return;
 
@@ -568,6 +585,7 @@ export class ReaderView extends TextFileView {
 		await this.commit({
 			kind: "quote",
 			text: captured.text,
+			isParent: asParent,
 			locator: {
 				surface: { kind: "pdf-page", index: pageNumber },
 				rect: captured.rect,
@@ -578,16 +596,16 @@ export class ReaderView extends TextFileView {
 		selection?.removeAllRanges();
 	}
 
-	private async clipRegion(pageNumber: number, rect: NormalisedRect): Promise<void> {
-		await this.commitImage(pageNumber, rect);
+	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
+		await this.commitImage(pageNumber, rect, asParent);
 	}
 
-	private async clipWholePage(): Promise<void> {
+	private async clipWholePage(asParent = false): Promise<void> {
 		const current = this.doc?.view.surface ?? 1;
-		await this.commitImage(current, WHOLE_SURFACE);
+		await this.commitImage(current, WHOLE_SURFACE, asParent);
 	}
 
-	private async commitImage(pageNumber: number, rect: NormalisedRect): Promise<void> {
+	private async commitImage(pageNumber: number, rect: NormalisedRect, asParent = false): Promise<void> {
 		const surface = this.surface;
 		if (!surface) return;
 
@@ -596,6 +614,7 @@ export class ReaderView extends TextFileView {
 			await this.commit({
 				kind: "image",
 				png,
+				isParent: asParent,
 				locator: { surface: { kind: "pdf-page", index: pageNumber }, rect },
 			});
 		} catch (error) {
@@ -628,14 +647,16 @@ export class ReaderView extends TextFileView {
 			// the definition on page 3, and the note should still read straight through.
 			const position = await appendClip(this.app, doc.notePath, clip, {
 				positionAt: (blockId) => {
+					const parents = new Set((doc.parents ?? []).map((id) => id.toLowerCase()));
 					for (const [id, locator] of Object.entries(doc.clips)) {
-						if (id.toLowerCase() === blockId) return positionOf(locator);
+						if (id.toLowerCase() === blockId) return positionOf(locator, parents.has(blockId));
 					}
 					return undefined;
 				},
 			});
 
 			doc.clips[clip.id] = clip.locator;
+			if (clip.isParent) doc.parents = [...(doc.parents ?? []), clip.id];
 			this.requestSave();
 			this.drawMarks(request.locator.surface.index);
 

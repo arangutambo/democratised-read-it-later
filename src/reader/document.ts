@@ -38,6 +38,13 @@ export interface ReaderDocument {
 	notePath: string;
 	/** Clip id → where it came from. Keyed by the same id the note carries as `^hl-<id>`. */
 	clips: Record<string, Locator>;
+	/**
+	 * Clip ids that are parents. Everything after one, up to the next, nests beneath it.
+	 *
+	 * Kept here rather than in the note because it is machinery, and the note may show no sign
+	 * of it beyond the indentation itself.
+	 */
+	parents?: string[];
 	view: ReaderView;
 }
 
@@ -53,6 +60,7 @@ export function createDocument(
 		source: { path: sourcePath, kind },
 		notePath,
 		clips: {},
+		parents: [],
 		view: { surface: 1, zoom: 1, scroll: 0 },
 	};
 }
@@ -165,6 +173,10 @@ export function parseDocument(raw: string): ParseResult {
 		warnings.push(`${dropped} mark(s) could not be read and will not be drawn on the document.`);
 	}
 
+	const parents = Array.isArray(data.parents)
+		? (data.parents as unknown[]).filter((id): id is string => typeof id === "string" && id !== "")
+		: [];
+
 	const view = isObject(data.view) ? data.view : {};
 
 	return {
@@ -174,6 +186,7 @@ export function parseDocument(raw: string): ParseResult {
 			source: { ...source, path, kind },
 			notePath: typeof data.notePath === "string" ? data.notePath : "",
 			clips,
+			parents,
 			view: {
 				surface: Math.max(1, Math.round(asFiniteNumber(view.surface, 1))),
 				zoom: Math.min(8, Math.max(0.1, asFiniteNumber(view.zoom, 1))),
@@ -232,10 +245,16 @@ export function reconcile(doc: ReaderDocument, noteBody: string): Reconciliation
 	const known = new Set(Object.keys(doc.clips).map((id) => id.toLowerCase()));
 	const unanchored = [...present].filter((id) => !known.has(id));
 
+	// A parent whose bullet was deleted stops being one, or later clips keep nesting under
+	// something the note no longer shows.
+	const parents = (doc.parents ?? []).filter((id) => id in clips);
+	const parentsChanged = parents.length !== (doc.parents ?? []).length;
+
 	return {
-		document: dropped.length === 0 ? doc : { ...doc, clips },
+		document:
+			dropped.length === 0 && !parentsChanged ? doc : { ...doc, clips, parents },
 		dropped,
 		unanchored,
-		changed: dropped.length > 0,
+		changed: dropped.length > 0 || parentsChanged,
 	};
 }

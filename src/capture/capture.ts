@@ -118,6 +118,7 @@ export function makeClip(
 		id: newId(),
 		documentId: context.documentId,
 		created: new Date(now()).toISOString(),
+		...(request.isParent ? { isParent: true } : {}),
 		locator,
 	};
 

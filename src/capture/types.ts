@@ -64,6 +64,14 @@ export interface Clip {
 	text?: string;
 	/** `kind: "image"` — vault-relative path to the PNG. */
 	assetPath?: string;
+	/**
+	 * A parent: clips after it, up to the next parent, nest beneath it.
+	 *
+	 * Scope runs by *position*, not by page. In a prose PDF a section's material often starts
+	 * partway down the page before it, and ends partway down the page after — so "the parent
+	 * on this page" is the wrong rule and "the last parent before this point" is the right one.
+	 */
+	isParent?: boolean;
 	locator: Locator;
 }
 
@@ -81,6 +89,8 @@ export interface CaptureRequest {
 	text?: string;
 	/** `kind: "image"` — raw PNG bytes, already rasterised by the surface. */
 	png?: Uint8Array;
+	/** Mark this clip as a parent for everything that follows it. */
+	isParent?: boolean;
 }
 
 export interface CaptureSink {

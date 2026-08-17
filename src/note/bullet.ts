@@ -37,6 +37,8 @@ export interface BulletOptions {
 	 * and one that leaves you to find the spot yourself.
 	 */
 	placeholder?: string;
+	/** 0 for a parent or an unparented clip, 1 for a child. */
+	depth?: number;
 }
 
 /**
@@ -49,8 +51,12 @@ export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	const id = blockId(clip.id);
 	const placeholder = options.placeholder ?? "";
 
+	// A child sits one level in from its parent, and its writing line one level in from that.
+	const pad = INDENT.repeat(options.depth ?? 0);
+	const writing = `${pad}${WRITING_LINE}`;
+
 	if (clip.kind !== "quote") {
-		return `- ![[${clip.assetPath ?? ""}]] ^${id}\n${WRITING_LINE}${placeholder}`;
+		return `${pad}- ![[${clip.assetPath ?? ""}]] ^${id}\n${writing}${placeholder}`;
 	}
 
 	/*
@@ -61,12 +67,12 @@ export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	 * The block id goes on the last line, which is where Obsidian looks for it.
 	 */
 	const lines = (clip.text ?? "").split("\n").map((line) => line.trimEnd()).filter((l) => l !== "");
-	if (lines.length === 0) return `- > ^${id}\n${WRITING_LINE}${placeholder}`;
+	if (lines.length === 0) return `${pad}- > ^${id}\n${writing}${placeholder}`;
 
-	const quoted = lines.map((line, i) => (i === 0 ? `- > ${line}` : `${INDENT}> ${line}`));
+	const quoted = lines.map((line, i) => (i === 0 ? `${pad}- > ${line}` : `${pad}${INDENT}> ${line}`));
 	quoted[quoted.length - 1] += ` ^${id}`;
 
-	return `${quoted.join("\n")}\n${WRITING_LINE}${placeholder}`;
+	return `${quoted.join("\n")}\n${writing}${placeholder}`;
 }
 
 /**
@@ -111,6 +117,8 @@ export interface ClipPosition {
 	top: number;
 	/** Normalised distance from the left, 0–1. */
 	left: number;
+	/** True when this clip is a parent, so what follows it nests underneath. */
+	isParent?: boolean;
 }
 
 /**
@@ -129,12 +137,47 @@ export function comparePositions(a: ClipPosition, b: ClipPosition): number {
 }
 
 /** A locator's position. A clip with no rect — a whole page — sorts to the top of its page. */
-export function positionOf(locator: Clip["locator"]): ClipPosition {
+export function positionOf(locator: Clip["locator"], isParent = false): ClipPosition {
 	return {
 		page: locator.surface.index,
 		top: locator.rect?.[1] ?? 0,
 		left: locator.rect?.[0] ?? 0,
+		...(isParent ? { isParent: true } : {}),
 	};
+}
+
+/**
+ * How deep a clip at `position` sits: 0 for a parent, 1 when a parent precedes it.
+ *
+ * A parent's scope runs from its own position **until the next parent**, not to the end of
+ * its page. In a prose PDF a section's material routinely starts partway down the page before
+ * it and ends partway down the page after, so "the parent on this page" is the wrong rule.
+ * The right one is "the last parent before this point".
+ *
+ * That also makes the ordering answer consistent: a clip from an earlier page than a parent
+ * sorts above it *and* belongs to whatever parent preceded it, or to nothing.
+ */
+export function depthFor(
+	position: ClipPosition,
+	isParent: boolean,
+	lines: readonly string[],
+	positionAt: (blockId: string) => ClipPosition | undefined,
+): number {
+	if (isParent) return 0;
+
+	let parentPrecedes = false;
+	for (const line of lines) {
+		const match = BULLET_LINE.exec(line);
+		if (!match) continue;
+
+		const other = positionAt(match[1].toLowerCase());
+		if (other === undefined) continue;
+		// Only clips genuinely before this one can own it.
+		if (comparePositions(other, position) >= 0) break;
+		if (other.isParent) parentPrecedes = true;
+	}
+
+	return parentPrecedes ? 1 : 0;
 }
 
 /**
@@ -199,15 +242,21 @@ export function insertBulletInPageOrder(
 	positionAt: (blockId: string) => ClipPosition | undefined,
 	options: BulletOptions = {},
 ): { body: string; line: number } {
-	const bullet = renderBullet(clip, options);
+	const position = positionOf(clip.locator, clip.isParent === true);
+	const lines = body.split("\n");
+
+	// Depth comes from the note's own contents: the last parent before this point owns it.
+	const depth = depthFor(position, clip.isParent === true, lines, positionAt);
+	const bullet = renderBullet(clip, { ...options, depth });
 
 	if (body.trim() === "") return { body: `${bullet}\n`, line: 1 };
 
-	const lines = body.split("\n");
-	const at = insertionLineFor(lines, positionOf(clip.locator), positionAt);
+	const at = insertionLineFor(lines, position, positionAt);
 
 	if (at >= lines.length) {
-		const next = appendBullet(body, clip, options);
+		// `depth` must travel with the options, or appending re-renders the bullet at the top
+		// level and a clip after a parent silently loses its nesting.
+		const next = appendBullet(body, clip, { ...options, depth });
 		// The writing line is the last line before the trailing newline.
 		return { body: next, line: Math.max(0, next.split("\n").length - 2) };
 	}
