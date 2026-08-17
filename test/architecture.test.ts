@@ -116,6 +116,48 @@ describe("architecture", () => {
 		expect(pureFiles().length).toBeGreaterThan(0);
 	});
 
+	it("stubs every `obsidian` export that shipped code imports", () => {
+		/*
+		 * The stub is a silent single point of failure. `library/view.ts` extends `ItemView`,
+		 * which the stub did not have; `main.ts` imports that view, `main.test.ts` imports
+		 * `main.ts`, and so the entire plugin-lifecycle suite — including the guard against
+		 * claiming `.pdf`, the crash that forced `.reader` to exist — failed at collection
+		 * while the summary line still read all-green, because a file that never collects has
+		 * no failing tests in it.
+		 *
+		 * Vitest does exit non-zero for that, which is the other half of the lesson: reading
+		 * the tail of a piped run reports the status of `tail`.
+		 */
+		const imported = new Set<string>();
+
+		for (const file of walk(SRC)) {
+			const source = stripComments(readFileSync(file, "utf8"));
+
+			// Values only. `import type` and an inline `type` marker are erased before the
+			// module runs, and tsc already checks those against the real package's types.
+			for (const [, names] of source.matchAll(/import\s*{([^}]*)}\s*from\s*["']obsidian["']/g)) {
+				for (const raw of names.split(",")) {
+					const entry = raw.trim();
+					if (entry === "" || /^type\s/.test(entry)) continue;
+					// `Foo as Bar` imports Foo.
+					imported.add(entry.split(/\s+as\s+/)[0].trim());
+				}
+			}
+		}
+
+		const stub = readFileSync(path.resolve(__dirname, "stubs/obsidian.ts"), "utf8");
+		const exported = new Set(
+			[
+				...stub.matchAll(
+					/export\s+(?:abstract\s+|async\s+)*(?:class|function|const|let|var)\s+(\w+)/g,
+				),
+			].map((m) => m[1]),
+		);
+
+		expect(imported.size).toBeGreaterThan(5);
+		expect([...imported].filter((name) => !exported.has(name)).sort()).toEqual([]);
+	});
+
 	it("every file named in PURE_FILES exists", () => {
 		// The named list is the half of the rule a rename can silently disable: a moved file
 		// simply stops being scanned, and the suite still reports green. Assert them present

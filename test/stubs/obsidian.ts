@@ -70,6 +70,28 @@ export class View {
 	async onClose(): Promise<void> {}
 }
 
+/*
+ * A pane that is not a file — the library.
+ *
+ * Absent for a while, and its absence was invisible: `library/view.ts` extends it, `main.ts`
+ * imports that, and `main.test.ts` imports `main.ts`, so the whole lifecycle suite failed at
+ * collection while the summary line still read all-green because no test inside it ran.
+ */
+export class ItemView extends View {
+	getViewType(): string {
+		return "";
+	}
+	getDisplayText(): string {
+		return "";
+	}
+	getIcon(): string {
+		return "";
+	}
+	addAction(): unknown {
+		return {};
+	}
+}
+
 export class FileView extends View {
 	file: TFile | null = null;
 }
@@ -83,6 +105,8 @@ export class TextFileView extends EditableFileView {
 
 export class TFile {}
 export class TFolder {}
+
+export function setIcon(_el: HTMLElement, _icon: string): void {}
 
 export const Platform = { isDesktopApp: true, isMacOS: true, isMobile: false };
 
