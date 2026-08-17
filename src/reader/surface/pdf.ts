@@ -17,6 +17,7 @@ import {
 	type PdfDocument,
 	type PdfJsLib,
 	type PdfLoadingTask,
+	type PdfOutlineNode,
 	type PdfPage,
 } from "../pdfjs";
 import type { NormalisedRect } from "../../capture/types";
@@ -44,6 +45,13 @@ export interface TextSpan {
 	 * further from the text the further along a line you drag.
 	 */
 	width: number;
+}
+
+/** A table-of-contents entry: what it says, how deep it sits, and where it goes. */
+export interface OutlineEntry {
+	title: string;
+	depth: number;
+	page?: number;
 }
 
 export interface RenderedPage {
@@ -291,6 +299,52 @@ export class PdfSurface implements DocumentSurfaces {
 			if (Math.abs(centreA - centreB) > 0.006) return centreA - centreB;
 			return a.left - b.left;
 		});
+	}
+
+	/**
+	 * The document's own table of contents, flattened to titles and page numbers.
+	 *
+	 * Empty for most slide decks, which carry none — the caller shows nothing rather than an
+	 * empty panel. Resolving a destination to a page costs a round trip each, so this is done
+	 * once and cached by the caller.
+	 */
+	async outline(): Promise<OutlineEntry[]> {
+		if (typeof this.document.getOutline !== "function") return [];
+
+		const nodes = await this.document.getOutline().catch(() => null);
+		if (!nodes || nodes.length === 0) return [];
+
+		const out: OutlineEntry[] = [];
+		const walk = async (items: PdfOutlineNode[], depth: number): Promise<void> => {
+			for (const item of items) {
+				const title = typeof item.title === "string" ? item.title.trim() : "";
+				if (title !== "") {
+					out.push({ title, depth, page: await this.pageOf(item.dest) });
+				}
+				if (Array.isArray(item.items) && item.items.length > 0) {
+					await walk(item.items, depth + 1);
+				}
+			}
+		};
+
+		await walk(nodes, 0);
+		return out;
+	}
+
+	/** The page a destination points at, or undefined when it cannot be resolved. */
+	private async pageOf(dest: PdfOutlineNode["dest"]): Promise<number | undefined> {
+		try {
+			const explicit =
+				typeof dest === "string" ? await this.document.getDestination?.(dest) : dest;
+			if (!Array.isArray(explicit) || explicit.length === 0) return undefined;
+
+			const index = await this.document.getPageIndex?.(explicit[0]);
+			// pdf.js counts from zero; everything else here counts from one.
+			return typeof index === "number" ? index + 1 : undefined;
+		} catch {
+			// A broken destination costs one outline entry its link, never the outline.
+			return undefined;
+		}
 	}
 
 	/**

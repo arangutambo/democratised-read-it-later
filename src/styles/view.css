@@ -273,3 +273,52 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 }
+
+/*
+ * The document's table of contents.
+ *
+ * Hidden entirely when the PDF carries none — most slide decks do not — rather than showing
+ * an empty rail. `o` toggles it, because on a narrow split the pages matter more.
+ */
+.reader-body {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+}
+
+.reader-outline {
+	flex: 0 0 auto;
+	width: 15em;
+	overflow-y: auto;
+	padding: var(--size-4-2) 0;
+	border-right: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-outline.is-empty,
+.reader-outline.is-hidden {
+	display: none;
+}
+
+.reader-outline-item {
+	padding: var(--size-2-1) var(--size-2-3);
+	cursor: pointer;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	/* Long section titles should not force the rail wider. */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.reader-outline-item:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.reader-outline-item.is-unresolved {
+	/* A destination pdf.js could not resolve: still worth showing, not worth clicking. */
+	cursor: default;
+	opacity: 0.5;
+}

@@ -155,3 +155,108 @@ describe("PdfSurface.open failure", () => {
 		expect(destroyed).toBe(true);
 	});
 });
+
+/**
+ * The table of contents.
+ *
+ * A destination is either a name that must be looked up or an explicit array whose first
+ * element is a page reference; either way pdf.js counts pages from zero and everything else
+ * here counts from one. A fake document exercises both shapes and the failure paths, which a
+ * real deck cannot — most carry no outline at all.
+ */
+describe("PdfSurface.outline", () => {
+	function docWith(overrides: Record<string, unknown>) {
+		return {
+			getDocument: () => ({
+				promise: Promise.resolve({
+					numPages: 20,
+					getPage: () => Promise.reject(new Error("unused")),
+					getMetadata: () => Promise.resolve({ info: {} }),
+					...overrides,
+				}),
+				destroy: async () => {},
+			}),
+		} as unknown as PdfJsLib;
+	}
+
+	async function outlineOf(overrides: Record<string, unknown>) {
+		const surface = await PdfSurface.open(new Uint8Array([1]), { pdfjs: docWith(overrides) });
+		try {
+			return await surface.outline();
+		} finally {
+			await surface.close();
+		}
+	}
+
+	it("is empty when the document has no outline", async () => {
+		expect(await outlineOf({ getOutline: async () => null })).toEqual([]);
+	});
+
+	it("is empty when the build has no getOutline at all", async () => {
+		expect(await outlineOf({})).toEqual([]);
+	});
+
+	it("resolves an explicit destination, counting pages from one", async () => {
+		const entries = await outlineOf({
+			getOutline: async () => [{ title: "Chapter 1", dest: [{ num: 4 }, "XYZ"] }],
+			getPageIndex: async () => 6,
+		});
+
+		expect(entries).toEqual([{ title: "Chapter 1", depth: 0, page: 7 }]);
+	});
+
+	it("resolves a named destination through getDestination", async () => {
+		const entries = await outlineOf({
+			getOutline: async () => [{ title: "Methods", dest: "sec.methods" }],
+			getDestination: async (id: string) => (id === "sec.methods" ? [{ num: 9 }] : null),
+			getPageIndex: async () => 11,
+		});
+
+		expect(entries[0]).toMatchObject({ title: "Methods", page: 12 });
+	});
+
+	it("flattens nested entries and records their depth", async () => {
+		const entries = await outlineOf({
+			getOutline: async () => [
+				{ title: "One", dest: [{}], items: [{ title: "One.a", dest: [{}] }] },
+				{ title: "Two", dest: [{}] },
+			],
+			getPageIndex: async () => 0,
+		});
+
+		expect(entries.map((e) => [e.title, e.depth])).toEqual([
+			["One", 0],
+			["One.a", 1],
+			["Two", 0],
+		]);
+	});
+
+	it("keeps an entry whose destination will not resolve, without a page", async () => {
+		// A broken destination costs that entry its link, never the whole outline.
+		const entries = await outlineOf({
+			getOutline: async () => [{ title: "Broken", dest: "missing" }],
+			getDestination: async () => null,
+		});
+
+		expect(entries).toEqual([{ title: "Broken", depth: 0, page: undefined }]);
+	});
+
+	it("skips entries with no title", async () => {
+		const entries = await outlineOf({
+			getOutline: async () => [{ title: "   ", dest: [{}] }, { title: "Real", dest: [{}] }],
+			getPageIndex: async () => 0,
+		});
+
+		expect(entries.map((e) => e.title)).toEqual(["Real"]);
+	});
+
+	it("survives getOutline throwing", async () => {
+		expect(
+			await outlineOf({
+				getOutline: async () => {
+					throw new Error("malformed");
+				},
+			}),
+		).toEqual([]);
+	});
+});

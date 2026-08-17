@@ -47,10 +47,24 @@ export interface PdfPage {
 	cleanup?(): void;
 }
 
+/** One entry in a PDF's own table of contents. */
+export interface PdfOutlineNode {
+	title?: string;
+	/** A named destination, or an explicit one whose first element is a page reference. */
+	dest?: string | unknown[] | null;
+	items?: PdfOutlineNode[];
+}
+
 export interface PdfDocument {
 	numPages: number;
 	getPage(pageNumber: number): Promise<PdfPage>;
 	getMetadata(): Promise<{ info?: Record<string, unknown> }>;
+	/** Null when the document has no table of contents, which is common for slide decks. */
+	getOutline?(): Promise<PdfOutlineNode[] | null>;
+	/** Resolves a named destination to an explicit one. */
+	getDestination?(id: string): Promise<unknown[] | null>;
+	/** 0-based page index for a page reference taken from a destination. */
+	getPageIndex?(ref: unknown): Promise<number>;
 }
 
 export interface PdfLoadingTask {

@@ -59,6 +59,7 @@ export class ReaderView extends TextFileView {
 	private window?: PageWindow;
 
 	private scroller!: HTMLElement;
+	private outlineEl!: HTMLElement;
 	private statusEl!: HTMLElement;
 
 	private readonly pages = new Map<number, PageElement>();
@@ -129,7 +130,9 @@ export class ReaderView extends TextFileView {
 		root.empty();
 		root.addClass("reader-view");
 
-		this.scroller = root.createDiv({ cls: "reader-scroller" });
+		const body = root.createDiv({ cls: "reader-body" });
+		this.outlineEl = body.createDiv({ cls: "reader-outline" });
+		this.scroller = body.createDiv({ cls: "reader-scroller" });
 		this.statusEl = root.createDiv({ cls: "reader-status" });
 
 		// `registerDomEvent` is Obsidian's own lifecycle-managed registration; the listener is
@@ -217,6 +220,10 @@ export class ReaderView extends TextFileView {
 			this.window = new PageWindow({ total: surface.pageCount, budget: this.deps.pageBudget });
 
 			await this.buildPages();
+			await this.buildOutline();
+			// Reopen where you left off. `.reader` has recorded this all along and nothing ever
+			// acted on it, so a 142-page workbook started at page 1 every single time.
+			this.goToPage(document.view.surface, "auto");
 			this.watchNote();
 			this.setStatus(`${surface.pageCount} pages · q quote · r region · p page · shift = parent`);
 		} catch (error) {
@@ -343,6 +350,46 @@ export class ReaderView extends TextFileView {
 			this.scroller.append(page.root);
 			observer.observe(page.root);
 		}
+	}
+
+	/**
+	 * The document's own table of contents, when it has one.
+	 *
+	 * Most slide decks carry none, so the panel is hidden rather than shown empty. Resolving
+	 * each entry to a page costs a worker round trip, so it happens once on open.
+	 */
+	private async buildOutline(): Promise<void> {
+		const surface = this.surface;
+		if (!surface) return;
+
+		const entries = await surface.outline().catch(() => []);
+		this.outlineEl.empty();
+
+		if (entries.length === 0) {
+			this.outlineEl.addClass("is-empty");
+			return;
+		}
+		this.outlineEl.removeClass("is-empty");
+
+		for (const entry of entries) {
+			const item = this.outlineEl.createDiv({ cls: "reader-outline-item", text: entry.title });
+			item.style.paddingLeft = `${0.5 + entry.depth * 0.75}em`;
+			if (entry.page === undefined) {
+				item.addClass("is-unresolved");
+				continue;
+			}
+			item.dataset.page = String(entry.page);
+			this.registerDomEvent(item, "click", () => this.goToPage(entry.page as number, "smooth"));
+		}
+	}
+
+	/** Scroll a page into view, and remember it. */
+	private goToPage(pageNumber: number, behavior: ScrollBehavior = "smooth"): void {
+		const page = this.pages.get(Math.min(this.surface?.pageCount ?? 1, Math.max(1, pageNumber)));
+		if (!page) return;
+
+		page.root.scrollIntoView({ behavior, block: "start" });
+		void this.goTo(pageNumber);
 	}
 
 	private onVisible(entries: IntersectionObserverEntry[]): void {
