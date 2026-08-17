@@ -15,6 +15,7 @@
 
 import { blockId } from "../core/ids";
 import type { Clip } from "../capture/types";
+import { ensureHeadings, type Section } from "./headings";
 
 /** Indent for the writing space under a clip. A tab matches Obsidian's own list handling. */
 const INDENT = "\t";
@@ -39,6 +40,11 @@ export interface BulletOptions {
 	placeholder?: string;
 	/** 0 for a parent or an unparented clip, 1 for a child. */
 	depth?: number;
+	/**
+	 * Sections of the document this clip falls in, outermost first, from its table of
+	 * contents. Any the note lacks are added as headings before the clip is placed.
+	 */
+	sections?: readonly Section[];
 }
 
 /**
@@ -224,7 +230,8 @@ export function insertionLineFor(
 function startOfBullet(lines: readonly string[], at: number): number {
 	for (let i = at; i >= 0; i--) {
 		if (/^-\s/.test(lines[i])) return i;
-		if (lines[i].trim() === "") break;
+		// A heading or a blank line means we have left the bullet without finding its start.
+		if (lines[i].trim() === "" || /^#{1,6}\s/.test(lines[i])) break;
 	}
 	return at;
 }
@@ -243,7 +250,22 @@ export function insertBulletInPageOrder(
 	options: BulletOptions = {},
 ): { body: string; line: number } {
 	const position = positionOf(clip.locator, clip.isParent === true);
-	const lines = body.split("\n");
+
+	/*
+	 * The document's own sections become headings first, so the clip lands underneath one
+	 * rather than above it. Headings are a fact about the document; parents are a judgement
+	 * you make. They compose.
+	 */
+	// An empty note splits to a single empty line, which would open the note with a blank one.
+	const existing = body === "" ? [] : body.split("\n");
+
+	const lines = options.sections?.length
+		? ensureHeadings(existing, options.sections, (section) =>
+				insertionLineFor(existing, { page: section.page, top: -1, left: -1 }, positionAt),
+			).lines
+		: existing;
+
+	body = lines.join("\n");
 
 	// Depth comes from the note's own contents: the last parent before this point owns it.
 	const depth = depthFor(position, clip.isParent === true, lines, positionAt);

@@ -15,6 +15,7 @@
 import { TFile, type App } from "obsidian";
 
 import { insertBulletInPageOrder, type BulletOptions, type ClipPosition } from "./bullet";
+import type { Section } from "./headings";
 import { readSourceId } from "./ownership";
 import type { Clip } from "../capture/types";
 
@@ -30,6 +31,8 @@ export interface AppendOptions extends BulletOptions {
 	 * reads in.
 	 */
 	positionAt?: (blockId: string) => ClipPosition | undefined;
+	/** The document's sections for this clip's page, outermost first. */
+	sections?: readonly Section[];
 	/**
 	 * Where the cursor should end up. The view uses this to put focus on the writing line
 	 * under the clip that was just made, which is the difference between "a clip landed

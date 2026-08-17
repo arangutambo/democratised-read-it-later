@@ -513,3 +513,78 @@ describe("parents", () => {
 		expect(out.split("\n")[line]).toBe("\t\t- ");
 	});
 });
+
+/**
+ * Headings from the document's own table of contents.
+ *
+ * Distinct from parents: a heading is a fact about the document, a parent is a judgement you
+ * make. They compose — a parent nests clips under itself, inside whatever section they are in.
+ */
+describe("sections become headings", () => {
+	const SECTIONS = [
+		{ title: "1 Vectors", depth: 0, page: 3 },
+		{ title: "1.2 Vectors in Rn", depth: 1, page: 14 },
+	];
+
+	function onPage(id: string, page: number, text: string): Clip {
+		return quoteClip(text, {
+			id,
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [0.1, 0.2, 0.2, 0.05] },
+		});
+	}
+
+	it("adds the section chain above the clip", () => {
+		const { body: out } = insertBulletInPageOrder(
+			"",
+			onPage("AAA", 16, "the dot product"),
+			() => undefined,
+			{ sections: SECTIONS },
+		);
+
+		const lines = out.split("\n");
+		expect(lines[0]).toBe("## 1 Vectors");
+		expect(lines[1]).toBe("### 1.2 Vectors in Rn");
+		expect(lines[2]).toContain("the dot product");
+	});
+
+	it("does not repeat a heading for a second clip in the same section", () => {
+		const first = insertBulletInPageOrder("", onPage("AAA", 16, "one"), () => undefined, {
+			sections: SECTIONS,
+		}).body;
+
+		const { body: out } = insertBulletInPageOrder(
+			first,
+			onPage("BBB", 17, "two"),
+			(id) => (id === "aaa" ? { page: 16, top: 0.2, left: 0.1 } : undefined),
+			{ sections: SECTIONS },
+		);
+
+		expect(out.split("## 1 Vectors")).toHaveLength(2);
+		expect(out.split("### 1.2 Vectors in Rn")).toHaveLength(2);
+	});
+
+	it("leaves the note alone when the document has no outline", () => {
+		const { body: out } = insertBulletInPageOrder("", onPage("AAA", 16, "a clip"), () => undefined, {
+			sections: [],
+		});
+
+		expect(out).not.toContain("#");
+	});
+
+	it("keeps a clip's bullet findable underneath its heading", () => {
+		// The walk-back that finds a bullet's first line must stop at a heading, or a heading
+		// immediately above a multi-line quote would be mistaken for part of it.
+		const first = insertBulletInPageOrder("", onPage("AAA", 16, "one"), () => undefined, {
+			sections: SECTIONS,
+		}).body;
+
+		const { body: out } = insertBulletInPageOrder(
+			first,
+			onPage("BBB", 4, "earlier"),
+			(id) => (id === "aaa" ? { page: 16, top: 0.2, left: 0.1 } : undefined),
+			{ sections: [SECTIONS[0]] },
+		);
+
+		expect(out.indexOf("earlier")).toBeLessThan(out.indexOf("one"));
+	});
+});

@@ -19,6 +19,7 @@ import type { CaptureRequest, NormalisedRect } from "../capture/types";
 import { Logger } from "../core/log";
 import { appendClip } from "../note/append";
 import { positionOf } from "../note/bullet";
+import { sectionsForPage, type Section } from "../note/headings";
 import { captureSelection } from "./gesture/selection";
 import { boxBetween, toNormalised, WHOLE_SURFACE } from "./gesture/region";
 import {
@@ -30,7 +31,7 @@ import {
 	type PageElement,
 } from "./render/page-element";
 import { PageWindow } from "./render/virtualiser";
-import { PdfSurface } from "./surface/pdf";
+import { PdfSurface, type OutlineEntry } from "./surface/pdf";
 import {
 	createDocument,
 	parseDocument,
@@ -60,6 +61,8 @@ export class ReaderView extends TextFileView {
 
 	private scroller!: HTMLElement;
 	private outlineEl!: HTMLElement;
+	/** The document's table of contents, resolved once on open. */
+	private outline: OutlineEntry[] = [];
 	private statusEl!: HTMLElement;
 
 	private readonly pages = new Map<number, PageElement>();
@@ -363,6 +366,7 @@ export class ReaderView extends TextFileView {
 		if (!surface) return;
 
 		const entries = await surface.outline().catch(() => []);
+		this.outline = entries;
 		this.outlineEl.empty();
 
 		if (entries.length === 0) {
@@ -693,6 +697,7 @@ export class ReaderView extends TextFileView {
 			// Page order, not capture order: you clip a figure on page 12 and then go back for
 			// the definition on page 3, and the note should still read straight through.
 			const position = await appendClip(this.app, doc.notePath, clip, {
+				sections: this.sectionsFor(request.locator.surface.index),
 				positionAt: (blockId) => {
 					const parents = new Set((doc.parents ?? []).map((id) => id.toLowerCase()));
 					for (const [id, locator] of Object.entries(doc.clips)) {
@@ -713,6 +718,19 @@ export class ReaderView extends TextFileView {
 			const message = error instanceof Error ? error.message : "The clip could not be saved.";
 			new Notice(`Reader: ${message}`, 10_000);
 		}
+	}
+
+	/**
+	 * The sections a page falls in, outermost first.
+	 *
+	 * Only entries whose destination resolved to a page can place anything, so an outline with
+	 * broken links contributes the parts that work rather than nothing.
+	 */
+	private sectionsFor(page: number): Section[] {
+		const usable = this.outline.filter(
+			(entry): entry is OutlineEntry & { page: number } => typeof entry.page === "number",
+		);
+		return sectionsForPage(usable as Section[], page);
 	}
 
 	private async writeAsset(basename: string, pageNumber: number, png: Uint8Array): Promise<string> {
