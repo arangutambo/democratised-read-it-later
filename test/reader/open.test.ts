@@ -30,7 +30,10 @@ class FakeVault {
 
 function fakeApp(): { app: App; vault: FakeVault } {
 	const vault = new FakeVault();
-	return { app: { vault } as unknown as App, vault };
+	// The cache is deliberately always empty: `readSourceId` treats it as a fast path and the
+	// file as the authority, because getFileCache() lags behind a note written moments ago.
+	const metadataCache = { getFileCache: () => null };
+	return { app: { vault, metadataCache } as unknown as App, vault };
 }
 
 const DECK = { path: "Sources/_decks/w2.pdf", basename: "w2", kind: "pdf" as const };
@@ -97,6 +100,40 @@ describe("ensurePair", () => {
 	it("steps over a folder sitting on the name", async () => {
 		vault.folders.add("Sources/w2.reader");
 		expect((await ensurePair(app, DECK, "Sources")).readerPath).toBe("Sources/w2 2.reader");
+	});
+
+	it("steps over a note an importer already owns", async () => {
+		/*
+		 * Found in a real window. v1's slides importer had already written this note for the
+		 * same deck and stamped it `readerSourceId`, so the pair formed against a note Reader
+		 * is not allowed to write into. The append-time guard caught it — but only after the
+		 * deck was open and a key had been pressed.
+		 *
+		 * Frontmatter below is copied verbatim from the note v1 actually left in the vault.
+		 */
+		vault.files.set(
+			"Sources/w2.md",
+			'---\ncitekey: "binf70012026week1part2andpart3slides"\n' +
+				'readerState: "inbox"\nreaderType: "slides"\n' +
+				'readerSourceId: "Sources/_decks/BINF7001_2026_WEEK1_Part2_and_Part3_slides.pdf"\n---\n\n# Deck\n',
+		);
+
+		const pair = await ensurePair(app, DECK, "Sources");
+
+		expect(pair.notePath).toBe("Sources/w2 2.md");
+		expect(pair.readerPath).toBe("Sources/w2 2.reader");
+		// The importer's note is left exactly as it was.
+		expect(vault.files.get("Sources/w2.md")).toContain("readerType: \"slides\"");
+	});
+
+	it("reuses the note path the .reader itself records", async () => {
+		// The note may have been renamed since; the .reader knows where it went.
+		await ensurePair(app, DECK, "Sources");
+		const doc = JSON.parse(vault.files.get("Sources/w2.reader") ?? "{}");
+		doc.notePath = "Sources/renamed by hand.md";
+		vault.files.set("Sources/w2.reader", JSON.stringify(doc));
+
+		expect((await ensurePair(app, DECK, "Sources")).notePath).toBe("Sources/renamed by hand.md");
 	});
 
 	it("keeps an existing note rather than blanking it", async () => {

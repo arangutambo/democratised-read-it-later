@@ -18,6 +18,7 @@
 
 import { normalizePath, TFile, type App } from "obsidian";
 
+import { readSourceId } from "../note/ownership";
 import { createDocument, serialise, type SourceKind } from "./document";
 
 export interface OpenTarget {
@@ -76,8 +77,11 @@ export async function ensurePair(
 			// Reuse it only if it is this same document; otherwise try the next name.
 			try {
 				const raw = await app.vault.read(existing);
-				if ((JSON.parse(raw) as { source?: { path?: string } }).source?.path === target.path) {
-					return { readerPath, notePath, created: false };
+				const stored = JSON.parse(raw) as { source?: { path?: string }; notePath?: string };
+				if (stored.source?.path === target.path) {
+					// The `.reader` records where its note actually is, which is not necessarily
+					// where we would put it today — the user may have renamed or moved it.
+					return { readerPath, notePath: stored.notePath || notePath, created: false };
 				}
 			} catch {
 				// Unreadable or not ours: do not touch it, and do not adopt it either.
@@ -86,6 +90,22 @@ export async function ensurePair(
 		}
 
 		if (existing) continue; // a folder is sitting on the name
+
+		/*
+		 * The note has to be free too, not just the `.reader`.
+		 *
+		 * Found by opening a deck in the real app: v1's slides importer had already written
+		 * `Sources/<deck>.md` and stamped it `readerSourceId`, so the pair was formed against
+		 * a note Reader is not allowed to write into. The append-time ownership guard caught
+		 * it correctly — but only after the document was open and a key had been pressed,
+		 * which is far too late to be useful.
+		 *
+		 * An importer rewrites its managed regions wholesale on every sync, so adopting such
+		 * a note would put clips inside a block that gets replaced, and lose them with no
+		 * conflict raised. Take the next name instead.
+		 */
+		const noteOwner = await readSourceId(app, notePath);
+		if (noteOwner !== undefined && noteOwner !== readerPath) continue;
 
 		const document = createDocument(target.path, target.kind, notePath);
 		await app.vault.create(readerPath, serialise(document));
