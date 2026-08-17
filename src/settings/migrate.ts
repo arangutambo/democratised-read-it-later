@@ -195,6 +195,10 @@ export function migrateSettings(
 		decksFolder: asString(data.decksFolder, DEFAULT_SETTINGS.decksFolder),
 		// 72 is a screen-resolution page and 600 is a 30 MB clip; both ends are user error.
 		clipDpi: Math.round(asNumberInRange(data.clipDpi, DEFAULT_SETTINGS.clipDpi, 72, 600)),
+		// 0% is a clip with nowhere to work; 400% is four pages of blank per clip.
+		excalidrawWorkingRoom: Math.round(
+			asNumberInRange(data.excalidrawWorkingRoom, DEFAULT_SETTINGS.excalidrawWorkingRoom, 0, 400),
+		),
 		zoteroDataDir: asString(data.zoteroDataDir, DEFAULT_SETTINGS.zoteroDataDir),
 		libraryPath: asString(data.libraryPath, DEFAULT_SETTINGS.libraryPath),
 		progressFile: asString(data.progressFile, DEFAULT_SETTINGS.progressFile),

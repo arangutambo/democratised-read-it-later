@@ -48,10 +48,12 @@ describe("renderBullet", () => {
 		expect(renderBullet(quoteClip("anything"))).toContain("^hl-01k9abcdefghjkmnpqrstvwxyz");
 	});
 
-	it("leaves an indented line underneath for your own prose", () => {
+	it("leaves a nested bullet underneath for your own prose", () => {
+		// A bullet rather than a bare tab: what you type is a list item in its own right, so it
+		// wraps, nests, and Enter gives you another instead of falling out of the list.
 		const lines = renderBullet(quoteClip("anything")).split("\n");
 		expect(lines).toHaveLength(2);
-		expect(lines[1]).toBe("\t");
+		expect(lines[1]).toBe("\t- ");
 	});
 
 	it("keeps a multi-line quote inside one bullet", () => {
@@ -69,7 +71,7 @@ describe("renderBullet", () => {
 		expect(lines[0]).toBe("- > A model and algorithm");
 		expect(lines[1]).toBe("\t> - has a bias");
 		expect(lines[2]).toBe("\t> - has variance ^hl-01k9abcdefghjkmnpqrstvwxyz");
-		expect(lines[3]).toBe("\t");
+		expect(lines[3]).toBe("\t- ");
 	});
 
 	it("preserves the indentation of a nested list", () => {
@@ -129,7 +131,7 @@ describe("what must never appear in a bullet", () => {
 
 describe("appendBullet", () => {
 	it("writes into an empty note without a leading blank line", () => {
-		expect(appendBullet("", quoteClip("first"))).toBe("- > first ^hl-01k9abcdefghjkmnpqrstvwxyz\n\t\n");
+		expect(appendBullet("", quoteClip("first"))).toBe("- > first ^hl-01k9abcdefghjkmnpqrstvwxyz\n\t- \n");
 	});
 
 	it("separates clips with exactly one blank line", () => {
@@ -161,7 +163,7 @@ describe("appendBullet", () => {
 
 	it("tolerates a note the user has left without a trailing newline", () => {
 		const out = appendBullet("prose with no trailing newline", quoteClip("clipped"));
-		expect(out).toContain("prose with no trailing newline\n\n- > clipped");
+		expect(out).toContain("prose with no trailing newline\n- > clipped");
 	});
 });
 
@@ -217,7 +219,7 @@ describe("insertBulletInPageOrder", () => {
 
 	it("lands in the middle of a run", () => {
 		const body =
-			"- > p1 ^hl-aaa\n\t\n\n- > p5 ^hl-bbb\n\t\n\n- > p9 ^hl-ccc\n\t\n";
+			"- > p1 ^hl-aaa\n\t- \n- > p5 ^hl-bbb\n\t- \n- > p9 ^hl-ccc\n\t- \n";
 		const { body: out } = insertBulletInPageOrder(
 			body,
 			onPage(7, "DDD", "p7"),
@@ -233,7 +235,7 @@ describe("insertBulletInPageOrder", () => {
 		const { body: out, line } = insertBulletInPageOrder(body, onPage(3, "BBB", "p3"), pages({ aaa: 9 }));
 
 		// The cursor must land under the new clip, which is no longer the end of the note.
-		expect(out.split("\n")[line]).toBe("\t");
+		expect(out.split("\n")[line]).toBe("\t- ");
 		expect(out.split("\n")[line - 1]).toContain("p3");
 	});
 

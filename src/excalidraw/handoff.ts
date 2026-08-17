@@ -73,6 +73,8 @@ export interface HandoffOptions {
 	drawingPath: string;
 	/** Label for each clip's frame — the page it came from reads well here. */
 	labels?: readonly string[];
+	/** Blank space under each clip, as a fraction of its height. */
+	workingRoom?: number;
 	ea: ExcalidrawAutomate;
 }
 
@@ -143,7 +145,7 @@ export async function sendToExcalidraw(
 		throw new ExcalidrawUnavailableError("None of those clips could be found in the vault.");
 	}
 
-	const placed = stack(added, { startY });
+	const placed = stack(added, { startY, workingRoom: options.workingRoom });
 
 	for (const [i, place] of placed.entries()) {
 		const element = ea.getElement(added[i].id);

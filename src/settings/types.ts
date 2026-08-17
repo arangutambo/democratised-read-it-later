@@ -101,6 +101,12 @@ export interface ReaderSettings {
 	 * slides being unreadable when you zoom, which defeats the purpose of clipping it.
 	 */
 	clipDpi: number;
+	/**
+	 * Blank space left under each clip sent to Excalidraw, as a percentage of the clip's own
+	 * height. Proportional because the room a clip needs scales with it: a whole exam page
+	 * needs more working underneath than a one-line definition.
+	 */
+	excalidrawWorkingRoom: number;
 	/** Zotero's data directory. Blank uses ~/Zotero. */
 	zoteroDataDir: string;
 	/**
@@ -133,6 +139,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	assetsFolder: "Sources/_assets",
 	decksFolder: "Sources/_decks",
 	clipDpi: 150,
+	excalidrawWorkingRoom: 66,
 	zoteroDataDir: "",
 	libraryPath: "",
 	progressFile: "Sources/.reader-progress.json",

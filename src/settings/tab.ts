@@ -98,6 +98,24 @@ export class ReaderSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
+			.setName("Excalidraw working room")
+			.setDesc(
+				"Blank space left under each clip sent to Excalidraw, as a percentage of the clip's " +
+					"own height. Proportional because a whole exam page needs more room underneath " +
+					"than a one-line definition. 0 leaves none.",
+			)
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 300, 10)
+					.setValue(this.plugin.settings.excalidrawWorkingRoom)
+					.setDynamicTooltip()
+					.onChange((value) => {
+						this.plugin.settings.excalidrawWorkingRoom = value;
+						this.save();
+					}),
+			);
+
+		new Setting(el)
 			.setName("Zotero data directory")
 			.setDesc(
 				"Where Zotero keeps zotero.sqlite and its storage folder. Blank uses ~/Zotero. " +

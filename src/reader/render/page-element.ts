@@ -45,14 +45,17 @@ export function createPageElement(pageNumber: number): PageElement {
 	return { root, canvasHost, textLayer, overlay, text: "", spans: [] };
 }
 
-/** Put a freshly rendered canvas into the page, replacing any previous one. */
+/**
+ * Put a freshly rendered canvas into the page, replacing any previous one.
+ *
+ * The page is sized by **aspect ratio**, never by pixels. Setting an explicit px width and
+ * height meant a page that had not been re-rendered kept a stale box after the pane was
+ * resized, and everything measured against it — the marks, the text layer — was then wrong
+ * until a render caught up. With a ratio, the page always fills the column at whatever width
+ * it happens to be, and a re-render only sharpens it.
+ */
 export function setCanvas(page: PageElement, canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number): void {
-	canvas.style.width = `${cssWidth}px`;
-	canvas.style.height = `${cssHeight}px`;
-
-	page.root.style.width = `${cssWidth}px`;
-	page.root.style.height = `${cssHeight}px`;
-
+	if (cssWidth > 0 && cssHeight > 0) page.root.style.aspectRatio = `${cssWidth} / ${cssHeight}`;
 	page.canvasHost.replaceChildren(canvas);
 }
 
@@ -98,7 +101,16 @@ export function setTextLayer(
 		el.textContent = span.text;
 		el.style.left = `${span.left * 100}%`;
 		el.style.top = `${span.top * 100}%`;
-		el.style.fontSize = `${Math.max(1, span.height * cssHeight)}px`;
+		/*
+		 * Sized as a fraction of the page's own height, not in pixels.
+		 *
+		 * `cqh` is 1% of the containing block's height, and `.reader-page` declares itself a
+		 * size container. So the layer rescales with the page for free — no re-measure, no
+		 * re-render, and no window in which selection lands somewhere the glyphs are not.
+		 * The scaleX below is a *ratio* of two lengths that both scale together, so it stays
+		 * correct at any size too.
+		 */
+		el.style.fontSize = `${Math.max(0.1, span.height * 100)}cqh`;
 
 		/*
 		 * A zero-width trailing space.

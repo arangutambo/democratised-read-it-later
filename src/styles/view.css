@@ -43,12 +43,19 @@
 	max-width: 100%;
 	background-color: var(--background-primary);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	/*
+	 * A size container, so the text layer can size itself in `cqh` — a fraction of this page's
+	 * own height. That is what makes selection stay over the glyphs at any pane width without
+	 * re-measuring, and it is why the page is sized by aspect-ratio rather than pixels.
+	 */
+	container-type: size;
 }
 
+.reader-page-canvas,
 .reader-page-canvas canvas {
 	display: block;
 	width: 100%;
-	height: auto;
+	height: 100%;
 }
 
 .reader-page-overlay {
@@ -165,4 +172,104 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	max-width: 28em;
+}
+
+/*
+ * The clip gallery.
+ *
+ * Clips are pictures, and `p14-msx2s38l.png` is not how you recognise one — the figure it
+ * holds is. Thumbnails come from the vault's own resource URLs, so nothing is decoded or
+ * copied to show them.
+ */
+.reader-picker-modal {
+	width: min(880px, 90vw);
+}
+
+.reader-clip-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: var(--size-4-3);
+	max-height: 55vh;
+	overflow-y: auto;
+	padding: var(--size-2-3);
+	margin-bottom: var(--size-4-2);
+}
+
+.reader-clip-card {
+	position: relative;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+	cursor: pointer;
+	background-color: var(--background-primary);
+	transition: border-color 80ms ease-out;
+}
+
+.reader-clip-card:hover {
+	border-color: var(--interactive-accent);
+}
+
+.reader-clip-card.is-chosen {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.reader-clip-thumb {
+	/* A consistent tile whatever the clip's shape, so the grid does not go ragged. */
+	aspect-ratio: 4 / 3;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background-color: var(--background-secondary);
+}
+
+.reader-clip-thumb img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.reader-clip-thumb.is-missing {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-clip-check {
+	position: absolute;
+	top: var(--size-2-2);
+	left: var(--size-2-2);
+	/* Legible over a white figure or a dark one. */
+	background-color: var(--background-primary);
+	border-radius: var(--radius-s);
+	padding: 2px;
+	line-height: 0;
+}
+
+.reader-clip-caption {
+	padding: var(--size-2-2) var(--size-2-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	border-top: 1px solid var(--background-modifier-border);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.reader-picker-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-2);
+}
+
+.reader-picker-footer .setting-item {
+	border-top: none;
+	padding: 0;
+	flex: 0 0 auto;
+}
+
+.reader-picker-count {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
 }

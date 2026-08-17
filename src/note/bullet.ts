@@ -19,6 +19,15 @@ import type { Clip } from "../capture/types";
 /** Indent for the writing space under a clip. A tab matches Obsidian's own list handling. */
 const INDENT = "\t";
 
+/**
+ * The line you write on, under a clip.
+ *
+ * A nested bullet rather than a bare tab, so what you type is a list item in its own right —
+ * it wraps, it nests further, and Enter gives you another one instead of falling out of the
+ * list.
+ */
+const WRITING_LINE = `${INDENT}- `;
+
 export interface BulletOptions {
 	/**
 	 * Placeholder line under the clip, indented, where the writing goes.
@@ -41,7 +50,7 @@ export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	const placeholder = options.placeholder ?? "";
 
 	if (clip.kind !== "quote") {
-		return `- ![[${clip.assetPath ?? ""}]] ^${id}\n${INDENT}${placeholder}`;
+		return `- ![[${clip.assetPath ?? ""}]] ^${id}\n${WRITING_LINE}${placeholder}`;
 	}
 
 	/*
@@ -52,12 +61,12 @@ export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	 * The block id goes on the last line, which is where Obsidian looks for it.
 	 */
 	const lines = (clip.text ?? "").split("\n").map((line) => line.trimEnd()).filter((l) => l !== "");
-	if (lines.length === 0) return `- > ^${id}\n${INDENT}${placeholder}`;
+	if (lines.length === 0) return `- > ^${id}\n${WRITING_LINE}${placeholder}`;
 
 	const quoted = lines.map((line, i) => (i === 0 ? `- > ${line}` : `${INDENT}> ${line}`));
 	quoted[quoted.length - 1] += ` ^${id}`;
 
-	return `${quoted.join("\n")}\n${INDENT}${placeholder}`;
+	return `${quoted.join("\n")}\n${WRITING_LINE}${placeholder}`;
 }
 
 /**
@@ -75,9 +84,15 @@ export function appendBullet(body: string, clip: Clip, options: BulletOptions = 
 	// trimmed, must not gain a leading blank line.
 	if (body.trim() === "") return `${bullet}\n`;
 
-	// One blank line between clips: enough to separate them in Live Preview, not so much that
-	// a note of thirty clips becomes a scroll.
-	const separator = body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
+	/*
+	 * No blank line between clips.
+	 *
+	 * Consecutive items make one tight list, which is how a note of thirty clips stays
+	 * readable — a blank line between each turns markdown's own list spacing loose and puts a
+	 * gap wherever the cursor happens to be. Prose the user wrote keeps its own separation,
+	 * because a blank line already there is left alone.
+	 */
+	const separator = body.endsWith("\n") ? "" : "\n";
 	return `${body}${separator}${bullet}\n`;
 }
 
@@ -156,11 +171,16 @@ export function insertionLineFor(
 	return lines.length;
 }
 
-/** Walk back from a line carrying a block id to the `- ` line that begins its bullet. */
+/**
+ * Walk back from a line carrying a block id to the line that begins its bullet.
+ *
+ * A bullet starts at column zero; everything indented below it is a continuation — a quote's
+ * later lines, or your own writing. Clips are a tight list with no blank lines between them,
+ * so a blank line is no longer the boundary and indentation is what marks one.
+ */
 function startOfBullet(lines: readonly string[], at: number): number {
 	for (let i = at; i >= 0; i--) {
-		if (/^\s*-\s/.test(lines[i])) return i;
-		// A blank line means we have left the bullet without finding its start.
+		if (/^-\s/.test(lines[i])) return i;
 		if (lines[i].trim() === "") break;
 	}
 	return at;
@@ -192,21 +212,15 @@ export function insertBulletInPageOrder(
 		return { body: next, line: Math.max(0, next.split("\n").length - 2) };
 	}
 
-	// A blank line after the inserted pair keeps one clear line between clips.
+	/*
+	 * Cut straight in. Clips are a tight list, so there is no blank line to add or trim —
+	 * which also removes the bug where trimming "blank" lines ate the writing line under the
+	 * clip above, because a lone tab reports as blank to `trim()`.
+	 */
 	const before = lines.slice(0, at);
 	const after = lines.slice(at);
-	const inserted = [...bullet.split("\n"), ""];
-
-	/*
-	 * Trim a blank line that would otherwise double up where we cut in.
-	 *
-	 * Strictly empty, not whitespace-only. The writing line under every clip is a lone tab,
-	 * which `trim()` reports as blank — so trimming that way ate the previous clip's writing
-	 * line on every insert, and the note's structure degraded a little with each one.
-	 */
-	while (before.length > 0 && before[before.length - 1] === "") before.pop();
-	if (before.length > 0) before.push("");
+	const inserted = bullet.split("\n");
 
 	const merged = [...before, ...inserted, ...after];
-	return { body: merged.join("\n"), line: before.length + 1 };
+	return { body: merged.join("\n"), line: before.length + inserted.length - 1 };
 }

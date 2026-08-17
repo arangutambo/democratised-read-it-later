@@ -93,8 +93,8 @@ describe("appendClip", () => {
 		const position = await appendClip(app, "Sources/deck.md", clip());
 		const lines = (vault.files.get("Sources/deck.md") ?? "").split("\n");
 
-		expect(lines[position.line]).toBe("\t");
-		expect(position.ch).toBe(1);
+		expect(lines[position.line]).toBe("\t- ");
+		expect(position.ch).toBe(3);
 	});
 
 	it("reports the writing line correctly on a note that already had content", async () => {
@@ -102,7 +102,7 @@ describe("appendClip", () => {
 		const position = await appendClip(app, "Sources/deck.md", clip());
 		const lines = (vault.files.get("Sources/deck.md") ?? "").split("\n");
 
-		expect(lines[position.line]).toBe("\t");
+		expect(lines[position.line]).toBe("\t- ");
 	});
 
 	it("refuses to write into a note owned by an importer", async () => {
@@ -213,7 +213,7 @@ describe("clipping out of document order", () => {
 		const bullets = lines.map((l, i) => [l, i] as const).filter(([l]) => l.startsWith("- "));
 
 		expect(bullets).toHaveLength(3);
-		for (const [, i] of bullets) expect(lines[i + 1]).toBe("\t");
+		for (const [, i] of bullets) expect(lines[i + 1]).toBe("\t- ");
 	});
 
 	it("keeps prose written under a clip attached to it", async () => {
@@ -221,7 +221,7 @@ describe("clipping out of document order", () => {
 		await clipAll(app, [at("AAA", 9, 0.1, "nine")]);
 
 		// Write under the first clip, the way you would while reading.
-		const withProse = (vault.files.get("n.md") ?? "").replace("\t", "\tmy working for page nine");
+		const withProse = (vault.files.get("n.md") ?? "").replace("\t- ", "\t- my working for page nine");
 		vault.files.set("n.md", withProse);
 
 		await appendClip(app, "n.md", at("BBB", 2, 0.1, "two"), {
@@ -231,6 +231,6 @@ describe("clipping out of document order", () => {
 		const lines = (vault.files.get("n.md") ?? "").split("\n");
 		const nine = lines.findIndex((l) => l.includes("nine"));
 
-		expect(lines[nine + 1]).toBe("\tmy working for page nine");
+		expect(lines[nine + 1]).toBe("\t- my working for page nine");
 	});
 });

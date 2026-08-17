@@ -194,6 +194,7 @@ export default class ReaderPlugin extends Plugin {
 								assets,
 								labels,
 								drawingPath: drawingPathFor(note.path),
+								workingRoom: this.settings.excalidrawWorkingRoom / 100,
 								ea,
 							});
 							new Notice(
