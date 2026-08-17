@@ -26,6 +26,8 @@ export default class ReaderPlugin extends Plugin {
 	readonly log = new Logger("[reader]");
 
 	private settingTab?: ReaderSettingTab;
+	/** Built on first use; a second paper must not re-copy and re-read the whole library. */
+	private zoteroIndex?: import("./sources/zotero/lookup").ZoteroIndex;
 
 	override async onload(): Promise<void> {
 		try {
@@ -214,6 +216,51 @@ export default class ReaderPlugin extends Plugin {
 		}
 	}
 
+	/**
+	 * Give a paper's note the citekey Better BibTeX already gave it.
+	 *
+	 * Silent when Zotero is not installed, not readable, or does not know the file — most of
+	 * what you read is not in a reference manager, and a lecture deck does not want a
+	 * bibliography entry. Only a genuine match writes anything.
+	 */
+	private async addPaperFrontmatter(notePath: string, pdfPath: string): Promise<void> {
+		if (!this.settings.features.zotero || !Platform.isDesktopApp) return;
+
+		try {
+			const { ZoteroIndex } = await import("./sources/zotero/lookup");
+			const { withPaperFrontmatter } = await import("./note/frontmatter");
+
+			this.zoteroIndex ??= await ZoteroIndex.open(this.settings.zoteroDataDir);
+			const match = this.zoteroIndex.find(pdfPath);
+			if (!match) return;
+
+			const note = this.app.vault.getFileByPath(notePath);
+			if (!note) return;
+
+			const body = await this.app.vault.read(note);
+			const next = withPaperFrontmatter(body, { citekey: match.citekey, csl: match.csl });
+			if (next === body) return;
+
+			await this.app.vault.modify(note, next);
+			const caveats: string[] = [];
+			if (match.how === "filename") caveats.push("matched by filename, so check it is the right paper");
+			if (match.citekeyFrom === "reader") {
+				// A generated key will not resolve in library.bib. Pinning it in Better BibTeX is
+				// the fix, and saying so beats letting a \cite fail at submission.
+				caveats.push("Better BibTeX has no key for it yet, so this one will not match library.bib");
+			}
+
+			new Notice(
+				`Reader: cite this as [@${match.citekey}]` +
+					(caveats.length > 0 ? ` — ${caveats.join("; ")}.` : "."),
+				caveats.length > 0 ? 12_000 : 6_000,
+			);
+		} catch (error) {
+			// Zotero being absent or locked is ordinary; it must not stop a document opening.
+			this.log.info("no Zotero metadata for this document", error);
+		}
+	}
+
 	/** Clip id → page, from the `.reader` beside this note. Empty when there is none. */
 	private async readerPagesFor(note: TFile): Promise<Map<string, number>> {
 		const out = new Map<string, number>();
@@ -242,6 +289,10 @@ export default class ReaderPlugin extends Plugin {
 				{ path: file.path, basename: file.basename, kind: "pdf" },
 				this.settings.sourcesFolder,
 			);
+
+			// Citation identity, if Zotero knows this file. Written once, at creation, so a
+			// citekey you have already cited is never moved under you.
+			if (pair.created) await this.addPaperFrontmatter(pair.notePath, file.path);
 
 			const readerFile = this.app.vault.getFileByPath(pair.readerPath);
 			if (!readerFile) throw new Error(`${pair.readerPath} could not be opened.`);

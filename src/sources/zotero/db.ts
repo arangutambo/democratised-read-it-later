@@ -103,6 +103,32 @@ join creatorTypes ct on ct.creatorTypeID = ic.creatorTypeID
 order by ic.itemID, ic.orderIndex
 ;`;
 
+/**
+ * Every PDF attachment and the item it belongs to.
+ *
+ * The annotation query already joins attachments, but only for items that *have* annotations.
+ * Opening a paper in Reader needs the reverse lookup for any attachment at all, annotated or
+ * not — most of a library is not annotated yet, and that is exactly what you are about to fix.
+ */
+const ATTACHMENT_SQL = `
+select ia.itemID       as itemID,
+       ia.parentItemID as parentItemID,
+       ia.path         as path,
+       ia.linkMode     as linkMode,
+       i.key           as key
+from itemAttachments ia
+join items i on i.itemID = ia.itemID
+where ia.parentItemID is not null
+;`;
+
+export interface ZoteroAttachmentRow {
+	itemID: number;
+	parentItemID: number;
+	path: string | null;
+	linkMode: number | null;
+	key: string | null;
+}
+
 export interface ZoteroReadResult {
 	items: ZoteroItemRow[];
 	annotations: ZoteroAnnotationRow[];
@@ -110,6 +136,7 @@ export interface ZoteroReadResult {
 	creators: ZoteroCreatorRow[];
 	/** Better BibTeX citation keys by itemID. Empty when BBT is not installed. */
 	citekeys: Map<number, string>;
+	attachments: ZoteroAttachmentRow[];
 	warnings: string[];
 }
 
@@ -122,11 +149,12 @@ export async function readZotero(paths: ZoteroPaths): Promise<ZoteroReadResult> 
 		const [library, bbt] = copies;
 		const warnings: string[] = [];
 
-		const [annotations, items, fields, creators] = await Promise.all([
+		const [annotations, items, fields, creators, attachments] = await Promise.all([
 			query<ZoteroAnnotationRow>(library, ANNOTATION_SQL),
 			query<ZoteroItemRow>(library, ITEM_SQL),
 			query<ZoteroFieldRow>(library, FIELD_SQL),
 			query<ZoteroCreatorRow>(library, CREATOR_SQL),
+			query<ZoteroAttachmentRow>(library, ATTACHMENT_SQL).catch(() => [] as ZoteroAttachmentRow[]),
 		]);
 
 		const citekeys = new Map<number, string>();
@@ -148,6 +176,6 @@ export async function readZotero(paths: ZoteroPaths): Promise<ZoteroReadResult> 
 			);
 		}
 
-		return { items, annotations, fields, creators, citekeys, warnings };
+		return { items, annotations, fields, creators, citekeys, attachments, warnings };
 	});
 }
