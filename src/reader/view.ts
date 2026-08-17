@@ -47,6 +47,8 @@ export interface ReaderViewDeps {
 	assetsFolder: string;
 	/** Pages held as canvases at once. Lower on mobile, where memory is the binding limit. */
 	pageBudget: number;
+	/** Reports the page count once known, so the library can show progress as a fraction. */
+	onPageCount?: (readerPath: string, pages: number) => void;
 	log: Logger;
 }
 
@@ -339,6 +341,8 @@ export class ReaderView extends TextFileView {
 			this.doc = document;
 			this.doc = await this.reconcileWithNote(document);
 			this.window = new PageWindow({ total: surface.pageCount, budget: this.deps.pageBudget });
+			// The shelf cannot know how long a document is until something has opened it.
+			if (this.file) this.deps.onPageCount?.(this.file.path, surface.pageCount);
 
 			await this.buildPages();
 			await this.buildOutline();

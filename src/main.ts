@@ -3,6 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile } from "obsidian";
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
 import { findExcalidraw } from "./excalidraw/handoff";
+import { LIBRARY_VIEW_TYPE, LibraryView } from "./library/view";
 import { isReadable } from "./reader/open";
 import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
 import { readerSkin } from "./render/reader-skin";
@@ -26,6 +27,14 @@ export default class ReaderPlugin extends Plugin {
 	readonly log = new Logger("[reader]");
 
 	private settingTab?: ReaderSettingTab;
+	/**
+	 * Page counts by `.reader` path, learned as documents are opened.
+	 *
+	 * Not persisted: it is derivable, and a stored count is one more thing to go stale when a
+	 * PDF is replaced by a newer edition.
+	 */
+	private readonly pageCounts = new Map<string, number>();
+
 	/** Built on first use; a second paper must not re-copy and re-read the whole library. */
 	private zoteroIndex?: import("./sources/zotero/lookup").ZoteroIndex;
 
@@ -117,9 +126,28 @@ export default class ReaderPlugin extends Plugin {
 					// A rendered page is 10–15 MB of canvas. Mobile gets the floor, where memory
 					// is the binding limit and a 315-page workbook is otherwise a dead tab.
 					pageBudget: Platform.isMobile ? 3 : 5,
+					onPageCount: (path, pages) => {
+						this.pageCounts.set(path, pages);
+						void this.refreshLibrary();
+					},
 					log: this.log,
 				}),
 		);
+
+		this.registerView(
+			LIBRARY_VIEW_TYPE,
+			(leaf) =>
+				new LibraryView(leaf, {
+					pageCounts: this.pageCounts,
+					onOpen: (path) => void this.openReaderFile(path),
+				}),
+		);
+
+		this.addCommand({
+			id: "open-reader-library",
+			name: "Open the Reader library",
+			callback: () => void this.revealLibrary(),
+		});
 
 		this.registerExtensions(["reader"], READER_VIEW_TYPE);
 
@@ -214,6 +242,42 @@ export default class ReaderPlugin extends Plugin {
 			this.log.error("could not prepare the Excalidraw handoff", error);
 			new Notice("Reader: could not read this note's clips — check the console.");
 		}
+	}
+
+	/** Show the library in the right sidebar, revealing it if it is already open. */
+	private async revealLibrary(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(LIBRARY_VIEW_TYPE);
+		if (existing.length > 0) {
+			await this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (!leaf) return;
+		await leaf.setViewState({ type: LIBRARY_VIEW_TYPE, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	private async refreshLibrary(): Promise<void> {
+		for (const leaf of this.app.workspace.getLeavesOfType(LIBRARY_VIEW_TYPE)) {
+			await (leaf.view as LibraryView).refresh();
+		}
+	}
+
+	/** Open a `.reader` from the shelf, reusing a tab already showing it. */
+	private async openReaderFile(path: string): Promise<void> {
+		const file = this.app.vault.getFileByPath(path);
+		if (!file) return;
+
+		const existing = this.app.workspace
+			.getLeavesOfType(READER_VIEW_TYPE)
+			.find((leaf) => (leaf.view as { file?: TFile }).file?.path === path);
+
+		if (existing) {
+			await this.app.workspace.revealLeaf(existing);
+			return;
+		}
+		await this.app.workspace.getLeaf(false).openFile(file);
 	}
 
 	/**
