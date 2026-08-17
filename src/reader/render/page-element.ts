@@ -80,9 +80,15 @@ export function releaseCanvas(page: PageElement): void {
  * refinement for later — the *captured text* is taken from the span's textContent, so it is
  * already exact regardless of how well the boxes line up.
  */
-export function setTextLayer(page: PageElement, spans: TextSpan[], cssHeight: number): void {
+export function setTextLayer(
+	page: PageElement,
+	spans: TextSpan[],
+	cssWidth: number,
+	cssHeight: number,
+): void {
 	const fragment = document.createDocumentFragment();
 	const parts: string[] = [];
+	const created: { el: HTMLElement; target: number }[] = [];
 
 	for (const span of spans) {
 		const el = document.createElement("span");
@@ -90,13 +96,45 @@ export function setTextLayer(page: PageElement, spans: TextSpan[], cssHeight: nu
 		el.style.left = `${span.left * 100}%`;
 		el.style.top = `${span.top * 100}%`;
 		el.style.fontSize = `${Math.max(1, span.height * cssHeight)}px`;
+
+		/*
+		 * A zero-width trailing space.
+		 *
+		 * pdf.js emits one item per run, and adjacent runs on a line carry no whitespace
+		 * between them — so a selection across "can" and "type" came out as "cantype". This
+		 * puts a real space in the text content, where `selection.toString()` picks it up,
+		 * while contributing nothing to layout or to the width measured below. Runs that
+		 * already end in a space are left alone; `tidyQuote` collapses any doubling anyway.
+		 */
+		if (!/\s$/.test(span.text)) {
+			const gap = document.createElement("span");
+			gap.className = "reader-space";
+			gap.textContent = " ";
+			el.append(gap);
+		}
+
 		fragment.append(el);
+		created.push({ el, target: span.width * cssWidth });
 		parts.push(span.text);
 	}
 
 	page.textLayer.replaceChildren(fragment);
-	// Joined with spaces: this is the haystack for a quote's prefix and suffix, and pdf.js
-	// emits one item per run rather than per word.
+
+	/*
+	 * Scale each span to the width the PDF gives it.
+	 *
+	 * The span is rendered in a system font, not the one embedded in the document, so its
+	 * natural width is wrong — and the error accumulates along a line, which is why selection
+	 * boundaries drifted further from the glyphs the further you dragged. Measuring after the
+	 * layer is in the DOM costs one forced reflow per page, which is worth it: this is the
+	 * difference between selection that lands where you point and selection that guesses.
+	 */
+	for (const { el, target } of created) {
+		const natural = el.getBoundingClientRect().width;
+		if (natural > 0 && target > 0) el.style.transform = `scaleX(${target / natural})`;
+	}
+
+	// Joined with spaces: this is the haystack for a quote's prefix and suffix.
 	page.text = parts.join(" ").replace(/\s+/g, " ").trim();
 }
 

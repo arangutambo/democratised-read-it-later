@@ -15,9 +15,10 @@
 import { Notice, Platform, TFile, TextFileView, type WorkspaceLeaf } from "obsidian";
 
 import { makeClip } from "../capture/capture";
-import type { CaptureRequest, Clip, NormalisedRect } from "../capture/types";
+import type { CaptureRequest, NormalisedRect } from "../capture/types";
 import { Logger } from "../core/log";
 import { appendClip } from "../note/append";
+import { positionOf } from "../note/bullet";
 import { captureSelection } from "./gesture/selection";
 import { boxBetween, toNormalised, WHOLE_SURFACE } from "./gesture/region";
 import {
@@ -305,7 +306,7 @@ export class ReaderView extends TextFileView {
 			}
 
 			setCanvas(page, rendered.canvas, rendered.cssWidth, rendered.cssHeight);
-			setTextLayer(page, await surface.textLayer(pageNumber), rendered.cssHeight);
+			setTextLayer(page, await surface.textLayer(pageNumber), rendered.cssWidth, rendered.cssHeight);
 			this.drawMarks(pageNumber);
 		} catch (error) {
 			// A cancelled render is the normal outcome of scrolling, not a fault.
@@ -493,13 +494,23 @@ export class ReaderView extends TextFileView {
 			}
 
 			const clip = makeClip(request, { documentId: file.path }, assetPath);
-			await appendClip(this.app, doc.notePath, clip);
+
+			// Page order, not capture order: you clip a figure on page 12 and then go back for
+			// the definition on page 3, and the note should still read straight through.
+			const position = await appendClip(this.app, doc.notePath, clip, {
+				positionAt: (blockId) => {
+					for (const [id, locator] of Object.entries(doc.clips)) {
+						if (id.toLowerCase() === blockId) return positionOf(locator);
+					}
+					return undefined;
+				},
+			});
 
 			doc.clips[clip.id] = clip.locator;
 			this.requestSave();
 			this.drawMarks(request.locator.surface.index);
 
-			await this.revealNote(clip);
+			await this.revealNote(position);
 		} catch (error) {
 			this.deps.log.error("could not save the clip", error);
 			const message = error instanceof Error ? error.message : "The clip could not be saved.";
@@ -528,7 +539,7 @@ export class ReaderView extends TextFileView {
 	 * is to type underneath it. The note is opened in a split beside the document if it is not
 	 * already showing.
 	 */
-	private async revealNote(clip: Clip): Promise<void> {
+	private async revealNote(position: { line: number; ch: number }): Promise<void> {
 		const doc = this.doc;
 		if (!doc) return;
 
@@ -546,12 +557,10 @@ export class ReaderView extends TextFileView {
 		const editor = view.editor;
 		if (!editor) return;
 
-		// The writing line is the last line of the appended bullet.
-		const lines = (await this.app.vault.read(note)).split("\n");
-		const line = Math.max(0, lines.length - 2);
-		editor.setCursor({ line, ch: lines[line]?.length ?? 0 });
+		// `position` is the writing line under the clip that just landed — which is no longer
+		// the end of the note now that clips sort by page.
+		editor.setCursor(position);
 		editor.focus();
-		void clip;
 	}
 
 	private setStatus(text: string): void {

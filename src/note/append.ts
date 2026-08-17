@@ -14,13 +14,22 @@
 
 import { TFile, type App } from "obsidian";
 
-import { appendBullet, type BulletOptions } from "./bullet";
+import { insertBulletInPageOrder, type BulletOptions, type ClipPosition } from "./bullet";
 import { readSourceId } from "./ownership";
 import type { Clip } from "../capture/types";
 
 export class NoteOwnershipError extends Error {}
 
 export interface AppendOptions extends BulletOptions {
+	/**
+	 * Resolves a block id already in the note to where it sits in the document, so the new clip
+	 * lands in reading order — by page, then down the page. Comes from `.reader`; none of it
+	 * may appear in the note.
+	 *
+	 * Without it, clips land in the order they were made, which is not the order the document
+	 * reads in.
+	 */
+	positionAt?: (blockId: string) => ClipPosition | undefined;
 	/**
 	 * Where the cursor should end up. The view uses this to put focus on the writing line
 	 * under the clip that was just made, which is the difference between "a clip landed
@@ -64,7 +73,12 @@ export async function appendClip(
 	}
 
 	const body = existing instanceof TFile ? await app.vault.read(existing) : "";
-	const next = appendBullet(body, clip, options);
+	const { body: next, line } = insertBulletInPageOrder(
+		body,
+		clip,
+		options.positionAt ?? (() => undefined),
+		options,
+	);
 
 	if (existing instanceof TFile) await app.vault.modify(existing, next);
 	else await app.vault.create(notePath, next);
@@ -72,8 +86,6 @@ export async function appendClip(
 	// The bullet is two lines: the clip, then the indented writing line. The cursor belongs
 	// on the second, after the tab.
 	const lines = next.split("\n");
-	// `next` always ends with a newline, so the writing line is the second from last entry.
-	const line = Math.max(lines.length - 2, 0);
 	const position = { line, ch: lines[line]?.length ?? 0 };
 
 	options.onAppended?.(position);

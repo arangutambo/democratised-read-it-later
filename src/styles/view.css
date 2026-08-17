@@ -132,3 +132,17 @@
 .markdown-source-view.mod-cm6 .cm-blockid:not(.cm-active .cm-blockid)::before {
 	content: "";
 }
+
+/*
+ * The zero-width word separator.
+ *
+ * pdf.js emits one span per text run with no whitespace between adjacent runs, so a
+ * selection across two of them came out as "cantype". This holds a real space that
+ * `selection.toString()` picks up while contributing nothing to layout — so it does not
+ * disturb the width each span is scaled to.
+ */
+.reader-page-text .reader-space {
+	display: inline-block;
+	width: 0;
+	overflow: hidden;
+}

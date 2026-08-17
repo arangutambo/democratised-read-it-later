@@ -34,6 +34,16 @@ export interface TextSpan {
 	left: number;
 	top: number;
 	height: number;
+	/**
+	 * Normalised width of the run as the PDF lays it out.
+	 *
+	 * Load-bearing for selection. Our span is rendered in a completely different font from the
+	 * one embedded in the PDF, so its natural width is wrong — sometimes by a lot. The layer
+	 * scales each span horizontally to this width, which is what makes the invisible selection
+	 * boxes sit over the glyphs you can actually see. Without it, selection boundaries drift
+	 * further from the text the further along a line you drag.
+	 */
+	width: number;
 }
 
 export interface RenderedPage {
@@ -255,6 +265,9 @@ export class PdfSurface implements DocumentSurfaces {
 			if (!Array.isArray(transform) || transform.length < 6) continue;
 
 			const height = item.height && item.height > 0 ? item.height : Math.abs(transform[3]);
+			// Some generators report no width; the horizontal scale times the run length is a
+			// serviceable estimate, and a wrong-but-close width beats a zero one.
+			const width = item.width && item.width > 0 ? item.width : Math.abs(transform[0]) * text.length * 0.5;
 
 			spans.push({
 				text,
@@ -262,6 +275,7 @@ export class PdfSurface implements DocumentSurfaces {
 				// PDF y runs up from the bottom; the DOM runs down from the top.
 				top: (unit.height - transform[5] - height) / unit.height,
 				height: height / unit.height,
+				width: width / unit.width,
 			});
 		}
 		return spans;

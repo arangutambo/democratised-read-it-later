@@ -76,3 +76,110 @@ export function appendBullet(body: string, clip: Clip, options: BulletOptions = 
 	const separator = body.endsWith("\n\n") ? "" : body.endsWith("\n") ? "\n" : "\n\n";
 	return `${body}${separator}${bullet}\n`;
 }
+
+/** A bullet line carrying one of our block ids, with the id captured. */
+const BULLET_LINE = /^\s*-\s.*\^hl-([0-9a-zA-Z]+)\s*$/;
+
+/** Where a clip sits in the document: which page, and where on it. */
+export interface ClipPosition {
+	page: number;
+	/** Normalised distance from the top of the page, 0–1. */
+	top: number;
+	/** Normalised distance from the left, 0–1. */
+	left: number;
+}
+
+/**
+ * Two clips on the same visual line rarely have identical tops — a selection box and a dragged
+ * box straddling the same row differ by a pixel or two. Within this tolerance they count as
+ * the same line and sort left to right, which is how the page actually reads.
+ *
+ * 0.006 of page height is about 5pt on A4: under one line of body text, over any noise.
+ */
+const SAME_LINE = 0.006;
+
+export function comparePositions(a: ClipPosition, b: ClipPosition): number {
+	if (a.page !== b.page) return a.page - b.page;
+	if (Math.abs(a.top - b.top) > SAME_LINE) return a.top - b.top;
+	return a.left - b.left;
+}
+
+/** A locator's position. A clip with no rect — a whole page — sorts to the top of its page. */
+export function positionOf(locator: Clip["locator"]): ClipPosition {
+	return {
+		page: locator.surface.index,
+		top: locator.rect?.[1] ?? 0,
+		left: locator.rect?.[0] ?? 0,
+	};
+}
+
+/**
+ * Where in the note a clip belongs, as a line index.
+ *
+ * Clips arrive in the order you make them, which is not the order the document reads in — you
+ * clip a figure low on page 12, then go back for the definition at the top of page 3. Sorting
+ * by page and then down the page means the note reads straight through afterwards.
+ *
+ * `positionAt` resolves a block id already in the note to its position. It comes from
+ * `.reader`, deliberately: none of this may appear in the note, so it cannot be read back out
+ * of one.
+ *
+ * Returns `lines.length` when the clip belongs at the end, which is the common case.
+ */
+export function insertionLineFor(
+	lines: readonly string[],
+	position: ClipPosition,
+	positionAt: (blockId: string) => ClipPosition | undefined,
+): number {
+	for (let i = 0; i < lines.length; i++) {
+		const match = BULLET_LINE.exec(lines[i]);
+		if (!match) continue;
+
+		const other = positionAt(match[1].toLowerCase());
+		// A bullet whose locator is gone sorts nowhere; stepping over it keeps the rest in
+		// order rather than piling everything in front of it.
+		if (other === undefined) continue;
+
+		if (comparePositions(other, position) > 0) return i;
+	}
+	return lines.length;
+}
+
+/**
+ * Insert a bullet in page order.
+ *
+ * Still never rewrites: existing lines are only ever moved wholesale, never edited, so prose
+ * indented under a bullet travels with it and a hand-edit cannot be clobbered. The plugin
+ * gains the ability to write *between* existing bullets and nothing more.
+ */
+export function insertBulletInPageOrder(
+	body: string,
+	clip: Clip,
+	positionAt: (blockId: string) => ClipPosition | undefined,
+	options: BulletOptions = {},
+): { body: string; line: number } {
+	const bullet = renderBullet(clip, options);
+
+	if (body.trim() === "") return { body: `${bullet}\n`, line: 1 };
+
+	const lines = body.split("\n");
+	const at = insertionLineFor(lines, positionOf(clip.locator), positionAt);
+
+	if (at >= lines.length) {
+		const next = appendBullet(body, clip, options);
+		// The writing line is the last line before the trailing newline.
+		return { body: next, line: Math.max(0, next.split("\n").length - 2) };
+	}
+
+	// A blank line after the inserted pair keeps one clear line between clips.
+	const before = lines.slice(0, at);
+	const after = lines.slice(at);
+	const inserted = [...bullet.split("\n"), ""];
+
+	// Trim a blank line that would otherwise double up where we cut in.
+	while (before.length > 0 && before[before.length - 1].trim() === "") before.pop();
+	if (before.length > 0) before.push("");
+
+	const merged = [...before, ...inserted, ...after];
+	return { body: merged.join("\n"), line: before.length + 1 };
+}

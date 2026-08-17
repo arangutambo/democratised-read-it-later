@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appendBullet, renderBullet } from "../../src/note/bullet";
+import { appendBullet, insertBulletInPageOrder, renderBullet } from "../../src/note/bullet";
 import type { Clip } from "../../src/capture/types";
 
 function quoteClip(text: string, overrides: Partial<Clip> = {}): Clip {
@@ -139,5 +139,183 @@ describe("appendBullet", () => {
 	it("tolerates a note the user has left without a trailing newline", () => {
 		const out = appendBullet("prose with no trailing newline", quoteClip("clipped"));
 		expect(out).toContain("prose with no trailing newline\n\n- > clipped");
+	});
+});
+
+/**
+ * Clips arrive in the order you make them, which is not the order the document reads in: you
+ * clip a figure on page 12, then go back for the definition on page 3. The note has to be
+ * readable straight through afterwards.
+ *
+ * The page comes from `.reader`, never from the note — the Live Preview rule forbids it
+ * appearing there, so it cannot be read back out.
+ */
+describe("insertBulletInPageOrder", () => {
+	function onPage(page: number, id: string, text: string, top = 0, left = 0): Clip {
+		return quoteClip(text, {
+			id,
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [left, top, 0.1, 0.05] },
+		});
+	}
+
+	/** Position for each block id, as `.reader` would report it. */
+	function pages(map: Record<string, number | [number, number, number]>) {
+		return (blockId: string) => {
+			const entry = map[blockId];
+			if (entry === undefined) return undefined;
+			const [page, top, left] = typeof entry === "number" ? [entry, 0, 0] : entry;
+			return { page, top, left };
+		};
+	}
+
+	it("appends when the clip is later than everything already there", () => {
+		const body = "- > page three ^hl-aaa\n\tmy prose\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(9, "BBB", "page nine"), pages({ aaa: 3 }));
+
+		expect(out.indexOf("page three")).toBeLessThan(out.indexOf("page nine"));
+	});
+
+	it("inserts before a later clip when you go back in the document", () => {
+		const body = "- > page twelve ^hl-aaa\n\tmy prose\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(3, "BBB", "page three"), pages({ aaa: 12 }));
+
+		expect(out.indexOf("page three")).toBeLessThan(out.indexOf("page twelve"));
+	});
+
+	it("carries the prose indented under a bullet along with it", () => {
+		// The prose belongs to its clip. Inserting must not separate them.
+		const body = "- > page twelve ^hl-aaa\n\tthis explains page twelve\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(3, "BBB", "page three"), pages({ aaa: 12 }));
+		const lines = out.split("\n");
+
+		const twelve = lines.findIndex((l) => l.includes("page twelve"));
+		expect(lines[twelve + 1]).toBe("\tthis explains page twelve");
+	});
+
+	it("lands in the middle of a run", () => {
+		const body =
+			"- > p1 ^hl-aaa\n\t\n\n- > p5 ^hl-bbb\n\t\n\n- > p9 ^hl-ccc\n\t\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			onPage(7, "DDD", "p7"),
+			pages({ aaa: 1, bbb: 5, ccc: 9 }),
+		);
+
+		const order = ["p1", "p5", "p7", "p9"].map((t) => out.indexOf(t));
+		expect(order).toEqual([...order].sort((a, b) => a - b));
+	});
+
+	it("reports the writing line of the clip it just inserted", () => {
+		const body = "- > p9 ^hl-aaa\n\t\n";
+		const { body: out, line } = insertBulletInPageOrder(body, onPage(3, "BBB", "p3"), pages({ aaa: 9 }));
+
+		// The cursor must land under the new clip, which is no longer the end of the note.
+		expect(out.split("\n")[line]).toBe("\t");
+		expect(out.split("\n")[line - 1]).toContain("p3");
+	});
+
+	it("keeps hand-written prose at the top of the note above everything", () => {
+		const body = "# My notes\n\nSomething I wrote.\n\n- > p9 ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(3, "BBB", "p3"), pages({ aaa: 9 }));
+
+		expect(out.startsWith("# My notes\n\nSomething I wrote.")).toBe(true);
+		expect(out.indexOf("p3")).toBeLessThan(out.indexOf("p9"));
+	});
+
+	it("steps over a bullet whose locator is gone rather than piling in front of it", () => {
+		// A clip whose .reader entry was lost sorts nowhere. Treating it as page 0 would push
+		// every later clip above it.
+		const body = "- > orphan ^hl-zzz\n\t\n\n- > p9 ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(3, "BBB", "p3"), pages({ aaa: 9 }));
+
+		expect(out.indexOf("orphan")).toBeLessThan(out.indexOf("p3"));
+		expect(out.indexOf("p3")).toBeLessThan(out.indexOf("p9"));
+	});
+
+	it("never edits an existing line, only moves it", () => {
+		const body = "- > wording I trimmed myself ^hl-aaa\n\tand my prose\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(1, "BBB", "p1"), pages({ aaa: 12 }));
+
+		expect(out).toContain("- > wording I trimmed myself ^hl-aaa");
+		expect(out).toContain("\tand my prose");
+	});
+
+	it("does not double up blank lines where it cuts in", () => {
+		const body = "- > p9 ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(body, onPage(3, "BBB", "p3"), pages({ aaa: 9 }));
+
+		expect(out).not.toMatch(/\n{3,}/);
+	});
+});
+
+describe("ordering within a page", () => {
+	function at(page: number, top: number, left: number, id: string, text: string): Clip {
+		return quoteClip(text, {
+			id,
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [left, top, 0.2, 0.04] },
+		});
+	}
+
+	const position = (page: number, top: number, left: number) => ({ page, top, left });
+
+	it("puts a clip from higher up the page above one from lower down", () => {
+		// You clip the conclusion, then go back for the premise above it.
+		const body = "- > bottom of page ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			at(3, 0.1, 0.1, "BBB", "top of page"),
+			(id) => (id === "aaa" ? position(3, 0.8, 0.1) : undefined),
+		);
+
+		expect(out.indexOf("top of page")).toBeLessThan(out.indexOf("bottom of page"));
+	});
+
+	it("reads two columns left to right when they sit on the same line", () => {
+		const body = "- > right column ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			at(3, 0.4, 0.1, "BBB", "left column"),
+			(id) => (id === "aaa" ? position(3, 0.4, 0.6) : undefined),
+		);
+
+		expect(out.indexOf("left column")).toBeLessThan(out.indexOf("right column"));
+	});
+
+	it("treats a few pixels of vertical difference as the same line", () => {
+		// A selection box and a dragged box across the same row rarely share an exact top.
+		const body = "- > drawn second, further right ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			at(3, 0.402, 0.1, "BBB", "further left"),
+			(id) => (id === "aaa" ? position(3, 0.4, 0.6) : undefined),
+		);
+
+		expect(out.indexOf("further left")).toBeLessThan(out.indexOf("drawn second"));
+	});
+
+	it("still sorts by page before position on the page", () => {
+		// Top of page 9 must not outrank the bottom of page 3.
+		const body = "- > bottom of page three ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			at(9, 0.02, 0.1, "BBB", "top of page nine"),
+			(id) => (id === "aaa" ? position(3, 0.95, 0.1) : undefined),
+		);
+
+		expect(out.indexOf("bottom of page three")).toBeLessThan(out.indexOf("top of page nine"));
+	});
+
+	it("sorts a whole-page clip to the top of its own page", () => {
+		// Key 3 stores no rect, so it has no position on the page — the page itself is the clip.
+		const wholePage = quoteClip("the whole page", {
+			id: "BBB",
+			locator: { surface: { kind: "pdf-page", index: 3 } },
+		});
+		const body = "- > something midway down ^hl-aaa\n\t\n";
+		const { body: out } = insertBulletInPageOrder(body, wholePage, (id) =>
+			id === "aaa" ? position(3, 0.5, 0.1) : undefined,
+		);
+
+		expect(out.indexOf("the whole page")).toBeLessThan(out.indexOf("something midway"));
 	});
 });
