@@ -54,12 +54,35 @@ describe("renderBullet", () => {
 		expect(lines[1]).toBe("\t");
 	});
 
-	it("keeps a wrapped quote on one line", () => {
-		// A PDF text layer emits a newline per line box. Left alone, the second line escapes
-		// the bullet and renders as body text.
-		const out = renderBullet(quoteClip("first line\n   second line"));
-		expect(out).toContain("- > first line second line");
-		expect(out.split("\n")).toHaveLength(2);
+	it("keeps a multi-line quote inside one bullet", () => {
+		/*
+		 * A bulleted slide is a list, and flattening it loses the shape that carried the
+		 * meaning. Continuation lines are indented and re-prefixed with `>` so the whole thing
+		 * stays one list item and one blockquote rather than escaping into body text.
+		 *
+		 * The structure comes from `gesture/structure.ts`, which only emits line breaks where
+		 * the slide genuinely had list items — prose that merely wrapped is rejoined first.
+		 */
+		const out = renderBullet(quoteClip("A model and algorithm\n- has a bias\n- has variance"));
+		const lines = out.split("\n");
+
+		expect(lines[0]).toBe("- > A model and algorithm");
+		expect(lines[1]).toBe("\t> - has a bias");
+		expect(lines[2]).toBe("\t> - has variance ^hl-01k9abcdefghjkmnpqrstvwxyz");
+		expect(lines[3]).toBe("\t");
+	});
+
+	it("preserves the indentation of a nested list", () => {
+		const out = renderBullet(quoteClip("- outer\n  - inner"));
+		expect(out).toContain("\t>   - inner");
+	});
+
+	it("puts the block id on the last line, where Obsidian looks for it", () => {
+		const out = renderBullet(quoteClip("one\n- two"));
+		const lines = out.split("\n");
+
+		expect(lines[0]).not.toContain("^hl-");
+		expect(lines[1]).toContain("^hl-01k9abcdefghjkmnpqrstvwxyz");
 	});
 });
 
@@ -317,5 +340,49 @@ describe("ordering within a page", () => {
 		);
 
 		expect(out.indexOf("the whole page")).toBeLessThan(out.indexOf("something midway"));
+	});
+});
+
+describe("sorting around multi-line quotes", () => {
+	function structured(id: string, page: number, text: string): Clip {
+		return quoteClip(text, {
+			id,
+			locator: { surface: { kind: "pdf-page", index: page }, rect: [0.1, 0.1, 0.2, 0.05] },
+		});
+	}
+
+	it("inserts before a whole bullet, never inside one", () => {
+		/*
+		 * A multi-line quote carries its block id on the last continuation line. Inserting at
+		 * that line would slice the bullet in half, leaving an orphaned blockquote fragment.
+		 */
+		const body = renderBullet(structured("AAA", 9, "heading\n- point one\n- point two")) + "\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			structured("BBB", 2, "earlier page"),
+			(id) => (id === "aaa" ? { page: 9, top: 0.1, left: 0.1 } : undefined),
+		);
+
+		const lines = out.split("\n");
+		const heading = lines.findIndex((l) => l.includes("heading"));
+
+		expect(out.indexOf("earlier page")).toBeLessThan(out.indexOf("heading"));
+		// The three lines of the later bullet are still contiguous and in order.
+		expect(lines[heading]).toBe("- > heading");
+		expect(lines[heading + 1]).toBe("\t> - point one");
+		expect(lines[heading + 2]).toContain("- point two");
+	});
+
+	it("still finds a multi-line bullet when sorting", () => {
+		// The id regex was anchored to `- `, which made every structured clip invisible to the
+		// sort and piled later clips in front of them.
+		const body = renderBullet(structured("AAA", 2, "heading\n- point")) + "\n";
+		const { body: out } = insertBulletInPageOrder(
+			body,
+			structured("BBB", 9, "later page"),
+			(id) => (id === "aaa" ? { page: 2, top: 0.1, left: 0.1 } : undefined),
+		);
+
+		expect(out.indexOf("heading")).toBeLessThan(out.indexOf("later page"));
 	});
 });

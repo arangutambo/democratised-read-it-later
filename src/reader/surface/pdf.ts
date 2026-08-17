@@ -278,7 +278,19 @@ export class PdfSurface implements DocumentSurfaces {
 				width: width / unit.width,
 			});
 		}
-		return spans;
+		/*
+		 * Reading order, not content-stream order.
+		 *
+		 * The layer is absolutely positioned, so DOM order is whatever order the PDF happened
+		 * to draw its text boxes in. Sorting here means a browser selection between two
+		 * visually adjacent runs covers what is actually between them on the page.
+		 */
+		return spans.sort((a, b) => {
+			const centreA = a.top + a.height / 2;
+			const centreB = b.top + b.height / 2;
+			if (Math.abs(centreA - centreB) > 0.006) return centreA - centreB;
+			return a.left - b.left;
+		});
 	}
 
 	/**

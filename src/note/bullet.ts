@@ -19,15 +19,6 @@ import type { Clip } from "../capture/types";
 /** Indent for the writing space under a clip. A tab matches Obsidian's own list handling. */
 const INDENT = "\t";
 
-/**
- * Markdown is line-oriented, so a quote containing a newline would break out of its bullet
- * and the rest would render as body text. `tidyQuote` already collapses whitespace; this is
- * the backstop for text arriving from anywhere else.
- */
-function singleLine(text: string): string {
-	return text.replace(/\s*\n\s*/g, " ").trim();
-}
-
 export interface BulletOptions {
 	/**
 	 * Placeholder line under the clip, indented, where the writing goes.
@@ -47,13 +38,26 @@ export interface BulletOptions {
  */
 export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	const id = blockId(clip.id);
-	const body =
-		clip.kind === "quote"
-			? `> ${singleLine(clip.text ?? "")}`
-			: `![[${clip.assetPath ?? ""}]]`;
-
 	const placeholder = options.placeholder ?? "";
-	return `- ${body} ^${id}\n${INDENT}${placeholder}`;
+
+	if (clip.kind !== "quote") {
+		return `- ![[${clip.assetPath ?? ""}]] ^${id}\n${INDENT}${placeholder}`;
+	}
+
+	/*
+	 * A quote may be several lines, because a bulleted slide is a list and flattening it loses
+	 * the shape that carried the meaning. Continuation lines are indented and re-prefixed with
+	 * `>` so the whole thing stays one list item and one blockquote in Live Preview.
+	 *
+	 * The block id goes on the last line, which is where Obsidian looks for it.
+	 */
+	const lines = (clip.text ?? "").split("\n").map((line) => line.trimEnd()).filter((l) => l !== "");
+	if (lines.length === 0) return `- > ^${id}\n${INDENT}${placeholder}`;
+
+	const quoted = lines.map((line, i) => (i === 0 ? `- > ${line}` : `${INDENT}> ${line}`));
+	quoted[quoted.length - 1] += ` ^${id}`;
+
+	return `${quoted.join("\n")}\n${INDENT}${placeholder}`;
 }
 
 /**
@@ -77,8 +81,13 @@ export function appendBullet(body: string, clip: Clip, options: BulletOptions = 
 	return `${body}${separator}${bullet}\n`;
 }
 
-/** A bullet line carrying one of our block ids, with the id captured. */
-const BULLET_LINE = /^\s*-\s.*\^hl-([0-9a-zA-Z]+)\s*$/;
+/**
+ * A line carrying one of our block ids, with the id captured.
+ *
+ * Not anchored to `- `, because a multi-line quote puts the id on its last continuation line.
+ * Anchoring to the bullet made every structured clip invisible to the sort.
+ */
+const BULLET_LINE = /\^hl-([0-9a-zA-Z]+)\s*$/;
 
 /** Where a clip sits in the document: which page, and where on it. */
 export interface ClipPosition {
@@ -140,9 +149,21 @@ export function insertionLineFor(
 		// order rather than piling everything in front of it.
 		if (other === undefined) continue;
 
-		if (comparePositions(other, position) > 0) return i;
+		// Insert before the *whole* bullet. A multi-line quote carries its id on the last
+		// continuation line, and cutting in there would slice the bullet in half.
+		if (comparePositions(other, position) > 0) return startOfBullet(lines, i);
 	}
 	return lines.length;
+}
+
+/** Walk back from a line carrying a block id to the `- ` line that begins its bullet. */
+function startOfBullet(lines: readonly string[], at: number): number {
+	for (let i = at; i >= 0; i--) {
+		if (/^\s*-\s/.test(lines[i])) return i;
+		// A blank line means we have left the bullet without finding its start.
+		if (lines[i].trim() === "") break;
+	}
+	return at;
 }
 
 /**

@@ -23,6 +23,8 @@ export interface PageElement {
 	overlay: HTMLElement;
 	/** Every text span's text, joined — the haystack a quote selector's context comes from. */
 	text: string;
+	/** The spans as laid out, in the same order as the layer's child elements. */
+	spans: TextSpan[];
 }
 
 export function createPageElement(pageNumber: number): PageElement {
@@ -40,7 +42,7 @@ export function createPageElement(pageNumber: number): PageElement {
 	textLayer.className = "reader-page-text";
 
 	root.append(canvasHost, overlay, textLayer);
-	return { root, canvasHost, textLayer, overlay, text: "" };
+	return { root, canvasHost, textLayer, overlay, text: "", spans: [] };
 }
 
 /** Put a freshly rendered canvas into the page, replacing any previous one. */
@@ -69,6 +71,7 @@ export function releaseCanvas(page: PageElement): void {
 	page.canvasHost.replaceChildren();
 	page.textLayer.replaceChildren();
 	page.text = "";
+	page.spans = [];
 }
 
 /**
@@ -119,6 +122,8 @@ export function setTextLayer(
 	}
 
 	page.textLayer.replaceChildren(fragment);
+	// Same order as the child elements, so a covered element maps back to its span.
+	page.spans = [...spans];
 
 	/*
 	 * Scale each span to the width the PDF gives it.

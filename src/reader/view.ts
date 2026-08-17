@@ -66,6 +66,8 @@ export class ReaderView extends TextFileView {
 	private renderAbort?: AbortController;
 
 	private mode: Mode = "read";
+	/** Removes the document-level Escape listener while a region is armed. */
+	private escapeHandler?: () => void;
 	/** Guards against a second load starting while the first is still opening a document. */
 	private loadToken = 0;
 
@@ -440,12 +442,7 @@ export class ReaderView extends TextFileView {
 				event.preventDefault();
 				void this.clipWholePage();
 				break;
-			case "escape":
-				if (this.mode === "arming-region") {
-					event.preventDefault();
-					this.disarmRegion();
-				}
-				break;
+			// Escape is handled on the document while armed — see armRegion().
 		}
 	}
 
@@ -453,10 +450,31 @@ export class ReaderView extends TextFileView {
 		this.mode = "arming-region";
 		this.scroller.addClass("is-arming-region");
 		this.setStatus("Drag a box around what you want. Escape to cancel.");
+
+		/*
+		 * Escape has to be caught on the document, not on the view.
+		 *
+		 * The view's own keydown handler only fires while the view holds focus, and arming the
+		 * mode is exactly when focus tends to be somewhere else — you pressed `r`, moved the
+		 * mouse, and the click that would have focused the view is the one you are trying to
+		 * avoid making. Capturing on the document means Escape always gets out.
+		 */
+		const onEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.disarmRegion();
+		};
+
+		document.addEventListener("keydown", onEscape, { capture: true });
+		this.escapeHandler = () => document.removeEventListener("keydown", onEscape, { capture: true });
+		this.register(this.escapeHandler);
 	}
 
 	private disarmRegion(): void {
 		this.mode = "read";
+		this.escapeHandler?.();
+		this.escapeHandler = undefined;
 		this.scroller.removeClass("is-arming-region");
 		this.setStatus(`${this.surface?.pageCount ?? 0} pages · q quote · r region · p page`);
 	}
@@ -525,7 +543,7 @@ export class ReaderView extends TextFileView {
 		}
 
 		const page = this.pages.get(pageNumber);
-		const captured = captureSelection(selection, pageEl, page?.text ?? "");
+		const captured = captureSelection(selection, pageEl, page?.text ?? "", page?.spans ?? []);
 		if (!captured) {
 			new Notice("Reader: nothing is selected.");
 			return;

@@ -17,6 +17,8 @@
 import type { TextQuoteSelector } from "../../core/types";
 import type { NormalisedRect } from "../../capture/types";
 import { toNormalised, type Box } from "./region";
+import { linesFromSpans, renderStructured } from "./structure";
+import type { TextSpan } from "../surface/pdf";
 
 /** Characters of context each side. Enough to disambiguate a word that recurs on a page. */
 const CONTEXT = 32;
@@ -92,22 +94,65 @@ export function captureSelection(
 	selection: Selection | null,
 	pageEl: HTMLElement,
 	pageText: string,
+	/** The page's spans, so the quote can be rebuilt from geometry rather than DOM order. */
+	spans: readonly TextSpan[] = [],
 ): CapturedSelection | undefined {
 	if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return undefined;
 
 	const range = selection.getRangeAt(0);
 	if (!pageEl.contains(range.commonAncestorContainer)) return undefined;
 
-	const text = selection.toString().replace(/\s+/g, " ").trim();
-	if (text === "") return undefined;
-
 	const pageRect = pageEl.getBoundingClientRect();
-	const box = selectionBox(range, pageRect);
+
+	/*
+	 * Which spans the selection actually covers, by index.
+	 *
+	 * `selection.toString()` walks the DOM, and the text layer is absolutely positioned — so a
+	 * selection between two visually adjacent runs swept up everything that happened to sit
+	 * between them in the markup. Selecting a slide heading picked up "Test metrics" from the
+	 * far corner of the page, and the mark drawn from the range's rects covered both.
+	 */
+	const covered: TextSpan[] = [];
+	const elements = pageEl.querySelectorAll(".reader-page-text > span");
+	elements.forEach((el, index) => {
+		if (!selection.containsNode(el, true)) return;
+		const span = spans[index];
+		if (span) covered.push(span);
+	});
+
+	const structured = covered.length > 0 ? renderStructured(linesFromSpans(covered)) : "";
+	// Fall back to the raw selection when the spans could not be matched — a quote that is
+	// merely unstructured beats refusing to capture the words at all.
+	const text = structured !== "" ? structured : selection.toString().replace(/\s+/g, " ").trim();
+	if (text.trim() === "") return undefined;
+
+	const box = coveredBox(covered, pageRect) ?? selectionBox(range, pageRect);
 	if (!box) return undefined;
+
+	// The selector matches on one line of text, so it uses the flattened form even when the
+	// quote itself keeps its list structure.
+	const flat = text.replace(/\s+/g, " ").trim();
 
 	return {
 		text,
-		quote: quoteSelectorFor(pageText, text),
+		quote: quoteSelectorFor(pageText, flat),
 		rect: toNormalised(box, pageRect.width, pageRect.height),
+	};
+}
+
+/** The box around exactly the spans covered, in the page element's coordinate space. */
+function coveredBox(spans: readonly TextSpan[], pageRect: DOMRect): Box | undefined {
+	if (spans.length === 0) return undefined;
+
+	const left = Math.min(...spans.map((s) => s.left));
+	const top = Math.min(...spans.map((s) => s.top));
+	const right = Math.max(...spans.map((s) => s.left + s.width));
+	const bottom = Math.max(...spans.map((s) => s.top + s.height));
+
+	return {
+		x: left * pageRect.width,
+		y: top * pageRect.height,
+		width: (right - left) * pageRect.width,
+		height: (bottom - top) * pageRect.height,
 	};
 }
