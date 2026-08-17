@@ -10,6 +10,8 @@ import {
 	parseExport,
 	parseTags,
 	stateFor,
+	type ReaderLocation,
+	type ReadwiseDocument,
 } from "../../../src/sources/readwise/export";
 
 const REAL = path.resolve(process.cwd(), "test/private/readwise/export.csv");
@@ -73,11 +75,12 @@ describe("stateFor", () => {
 });
 
 describe("importable", () => {
-	const docs = [
-		{ id: "1", location: "new", seen: true },
-		{ id: "2", location: "feed", seen: false },
-		{ id: "3", location: "archive", seen: true },
-	] as Parameters<typeof importable>[0];
+	/** Only the fields the filter reads; the rest of a document is irrelevant here. */
+	function doc(id: string, location: ReaderLocation, seen: boolean): ReadwiseDocument {
+		return { id, title: id, url: "", tags: [], progress: 0, location, seen };
+	}
+
+	const docs = [doc("1", "new", true), doc("2", "feed", false), doc("3", "archive", true)];
 
 	it("leaves the feed out by default", () => {
 		// 3,443 of 5,542 rows in a real export. Importing it wholesale is v1's bulk-extraction
