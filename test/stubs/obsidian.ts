@@ -250,6 +250,22 @@ export class Setting {
 }
 
 /** Enough of `Modal` for the clip picker to be constructed and torn down in a test. */
+/** The quick switcher's base. Fuzzy matching itself is Obsidian's, not ours to imitate. */
+export class FuzzySuggestModal<T> {
+	constructor(public app: unknown) {}
+	setPlaceholder(_text: string): void {}
+	setInstructions(_items: unknown[]): void {}
+	getItems(): T[] {
+		return [];
+	}
+	getItemText(_item: T): string {
+		return "";
+	}
+	onChooseItem(_item: T, _event?: unknown): void {}
+	open(): void {}
+	close(): void {}
+}
+
 export class Modal {
 	contentEl = {
 		empty: (): void => {},

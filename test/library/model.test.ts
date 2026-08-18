@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	countsByState,
 	filterEntries,
+	nextToOpen,
 	ofState,
 	sortEntries,
 	stateOf,
@@ -190,5 +191,53 @@ describe("ofState", () => {
 	it("passes everything through for 'all'", () => {
 		const entries = [entry({ page: 1, clips: 0 }), entry({ page: 4, clips: 2 })];
 		expect(ofState(entries, "all")).toHaveLength(2);
+	});
+});
+
+describe("nextToOpen", () => {
+	const at = (path: string, modified: number, e: { page: number; pages?: number; clips: number }) => ({
+		...entry(e),
+		path,
+		modified,
+	});
+
+	it("continues with the most recently touched thing in progress", () => {
+		// What you put down and meant to come back to.
+		const entries = [
+			at("old.reader", 100, { page: 4, clips: 1 }),
+			at("recent.reader", 900, { page: 9, clips: 2 }),
+		];
+
+		expect(nextToOpen(entries, "reading")?.path).toBe("recent.reader");
+	});
+
+	it("takes the oldest unread, so the queue drains from the bottom", () => {
+		/*
+		 * Newest-first would mean the same handful forever after an import of 2,000 documents,
+		 * and everything saved before it would never surface.
+		 */
+		const entries = [
+			at("new.reader", 900, { page: 1, clips: 0 }),
+			at("old.reader", 100, { page: 1, clips: 0 }),
+		];
+
+		expect(nextToOpen(entries, "unread")?.path).toBe("old.reader");
+	});
+
+	it("never offers the one already open", () => {
+		// Otherwise "next" means "this one" forever.
+		const entries = [at("open.reader", 900, { page: 4, clips: 1 })];
+		expect(nextToOpen(entries, "reading", "open.reader")).toBeUndefined();
+	});
+
+	it("ignores documents in another state", () => {
+		const entries = [at("done.reader", 900, { page: 10, pages: 10, clips: 1 })];
+
+		expect(nextToOpen(entries, "reading")).toBeUndefined();
+		expect(nextToOpen(entries, "unread")).toBeUndefined();
+	});
+
+	it("is undefined for an empty shelf", () => {
+		expect(nextToOpen([], "unread")).toBeUndefined();
 	});
 });

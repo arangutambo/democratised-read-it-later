@@ -131,3 +131,25 @@ export function ofState(
 ): LibraryEntry[] {
 	return state === "all" ? [...entries] : entries.filter((entry) => entry.state === state);
 }
+
+/**
+ * The one to open next, for a given state.
+ *
+ * Most recently touched first for something in progress — that is the thing you put down and
+ * meant to come back to. Oldest first for unread, so a queue drains from the bottom instead of
+ * burying everything under whatever arrived last; after an import of 2,000 documents, "newest
+ * unread" would mean the same handful forever.
+ */
+export function nextToOpen(
+	entries: readonly LibraryEntry[],
+	state: Exclude<ReadingState, "finished">,
+	exclude?: string,
+): LibraryEntry | undefined {
+	const candidates = entries.filter((entry) => entry.state === state && entry.path !== exclude);
+	if (candidates.length === 0) return undefined;
+
+	const by = state === "reading" ? (a: LibraryEntry, b: LibraryEntry) => b.modified - a.modified
+		: (a: LibraryEntry, b: LibraryEntry) => a.modified - b.modified;
+
+	return [...candidates].sort(by)[0];
+}

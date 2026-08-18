@@ -153,6 +153,24 @@ export default class ReaderPlugin extends Plugin {
 		);
 
 		this.addCommand({
+			id: "search-reader-library",
+			name: "Search the Reader library",
+			callback: () => void this.openSwitcher(),
+		});
+
+		this.addCommand({
+			id: "reader-continue",
+			name: "Continue reading",
+			callback: () => void this.openNext("reading"),
+		});
+
+		this.addCommand({
+			id: "reader-next-unread",
+			name: "Open the next unread document",
+			callback: () => void this.openNext("unread"),
+		});
+
+		this.addCommand({
 			id: "open-reader-library",
 			name: "Open the Reader library",
 			callback: () => void this.revealLibrary(),
@@ -265,6 +283,54 @@ export default class ReaderPlugin extends Plugin {
 		if (!leaf) return;
 		await leaf.setViewState({ type: LIBRARY_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/**
+	 * The library as a quick switcher.
+	 *
+	 * Scanned on demand rather than kept in memory: the pane may never have been opened, and a
+	 * scan is cheap next to the alternative of a second index that goes stale.
+	 */
+	private async openSwitcher(): Promise<void> {
+		const { scanLibrary } = await import("./library/scan");
+		const { LibrarySwitcher } = await import("./library/switcher");
+
+		const entries = await scanLibrary(this.app, { pageCounts: this.pageCounts });
+
+		if (entries.length === 0) {
+			new Notice("Reader: nothing in the library yet — right-click a document and choose Open in Reader.");
+			return;
+		}
+
+		new LibrarySwitcher(this.app, entries, (entry) => void this.openReaderFile(entry.path)).open();
+	}
+
+	/**
+	 * Open whatever is next, without having to choose.
+	 *
+	 * "Continue" takes the most recently touched thing in progress — what you put down and
+	 * meant to come back to. "Next unread" takes the oldest, so a queue drains from the bottom
+	 * rather than burying everything under whatever arrived last.
+	 */
+	private async openNext(state: "reading" | "unread"): Promise<void> {
+		const { scanLibrary } = await import("./library/scan");
+		const { nextToOpen } = await import("./library/model");
+
+		const entries = await scanLibrary(this.app, { pageCounts: this.pageCounts });
+		// Not the one already on screen, or "next" would mean "this one" forever.
+		const open = this.app.workspace.getActiveFile()?.path;
+		const entry = nextToOpen(entries, state, open);
+
+		if (!entry) {
+			new Notice(
+				state === "reading"
+					? "Reader: nothing in progress. Try the next unread document."
+					: "Reader: nothing unread left.",
+			);
+			return;
+		}
+
+		await this.openReaderFile(entry.path);
 	}
 
 	private async refreshLibrary(): Promise<void> {
