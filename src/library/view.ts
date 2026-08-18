@@ -95,6 +95,9 @@ export class LibraryView extends ItemView {
 
 	private listEl!: HTMLElement;
 	private chipsEl!: HTMLElement;
+	private statusEl!: HTMLElement;
+	/** What the status line last said, so an unchanged shelf is not re-announced. */
+	private announced = "";
 	private searchEl!: HTMLInputElement;
 
 	constructor(leaf: WorkspaceLeaf, deps: LibraryDeps) {
@@ -121,6 +124,9 @@ export class LibraryView extends ItemView {
 
 		const header = root.createDiv({ cls: "reader-library-header" });
 		this.searchEl = header.createEl("input", { type: "search", placeholder: "Filter…" });
+		// A placeholder is not a label: it is gone the moment you type, and a screen reader
+		// gets no name for the field at all.
+		this.searchEl.setAttribute("aria-label", "Filter the Reader library");
 		this.registerDomEvent(this.searchEl, "input", () => {
 			this.query = this.searchEl.value;
 			this.drawn = PAGE;
@@ -128,6 +134,7 @@ export class LibraryView extends ItemView {
 		});
 
 		const sortEl = header.createEl("select");
+		sortEl.setAttribute("aria-label", "Sort the Reader library");
 		for (const [value, label] of [
 			["recent", "Recent"],
 			["title", "Title"],
@@ -149,6 +156,17 @@ export class LibraryView extends ItemView {
 		 * what you opened this pane for.
 		 */
 		this.chipsEl = root.createDiv({ cls: "reader-library-chips" });
+
+		/*
+		 * One status line for the whole shelf.
+		 *
+		 * The counts change on their own — an import, a sync, finishing a document. Making each
+		 * chip a live region would have four of them talking over each other announcing bare
+		 * numbers; one atomic sentence says what actually changed.
+		 */
+		this.statusEl = root.createDiv({ cls: "reader-library-status" });
+		this.statusEl.setAttribute("role", "status");
+		this.statusEl.setAttribute("aria-atomic", "true");
 
 		this.listEl = root.createDiv({ cls: "reader-library-list" });
 
@@ -242,6 +260,13 @@ export class LibraryView extends ItemView {
 	async refresh(): Promise<void> {
 		const files = this.app.vault.getFiles().filter((file) => file.extension === "reader");
 
+		// A 2,000-file scan is seconds of work; an empty shelf with no explanation reads as
+		// broken. Busy is set for the wait rather than a spinner flashing for a small vault.
+		if (files.length > 200) {
+			this.listEl?.setAttribute("aria-busy", "true");
+			this.say(`Reading ${files.length} documents…`);
+		}
+
 		this.entries.clear();
 		for (const [i, file] of files.entries()) {
 			const entry = await this.readEntry(file);
@@ -265,7 +290,21 @@ export class LibraryView extends ItemView {
 			this.state = "reading";
 		}
 
+		this.listEl?.removeAttribute("aria-busy");
+		this.revision++;
 		this.render();
+	}
+
+	/**
+	 * Announce a change to the shelf, once.
+	 *
+	 * Guarded on the last message because `render` runs on every scroll page and every file
+	 * change, and repeating an unchanged sentence is how a status region becomes noise.
+	 */
+	private say(message: string): void {
+		if (!this.statusEl || message === this.announced) return;
+		this.announced = message;
+		this.statusEl.setText(message);
 	}
 
 	/** The entries currently on show, in order. Cached; see `cache`. */
@@ -324,6 +363,11 @@ export class LibraryView extends ItemView {
 			});
 			return;
 		}
+
+		const counts = countsByState([...this.entries.values()]);
+		this.say(
+			`${shown.length} shown · ${counts.reading} reading, ${counts.unread} unread, ${counts.finished} finished`,
+		);
 
 		for (const entry of shown.slice(0, this.drawn)) this.renderRow(entry);
 

@@ -469,7 +469,10 @@
 	font-size: var(--font-ui-smaller);
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
+	/* Whole on one line, shrinkable rather than fixed — a wrapped compact label is worse than
+	   a tight one, and the full text is on the control's accessible name either way. */
 	white-space: nowrap;
+	min-width: 0;
 }
 
 /* Says why the list stopped, so a short list is never mistaken for the whole shelf. */
@@ -841,4 +844,15 @@
 /* Full page: the document and nothing else. */
 .reader-view.is-full-page .reader-outline {
 	display: none;
+}
+
+/* The shelf's status line: one sentence, for anyone who cannot see the counts. */
+.reader-library-status {
+	padding: 0 var(--size-2-3) var(--size-2-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.reader-library-list[aria-busy="true"] {
+	opacity: 0.6;
 }

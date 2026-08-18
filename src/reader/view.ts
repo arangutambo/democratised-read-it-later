@@ -218,6 +218,7 @@ export class ReaderView extends TextFileView {
 			type: "search",
 			placeholder: "Find in document…",
 		});
+		this.searchInput.setAttribute("aria-label", "Find in document");
 		this.searchStatusEl = this.searchEl.createDiv({ cls: "reader-search-status" });
 		this.searchResultsEl = this.searchEl.createDiv({ cls: "reader-search-results" });
 
