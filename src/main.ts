@@ -171,6 +171,12 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "open-reader-library-tab",
+			name: "Open the Reader library in a tab",
+			callback: () => void this.revealLibrary(true),
+		});
+
+		this.addCommand({
 			id: "open-reader-library",
 			name: "Open the Reader library",
 			callback: () => void this.revealLibrary(),
@@ -272,15 +278,26 @@ export default class ReaderPlugin extends Plugin {
 	}
 
 	/** Show the library in the right sidebar, revealing it if it is already open. */
-	private async revealLibrary(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(LIBRARY_VIEW_TYPE);
+	/**
+	 * Show the shelf, in the sidebar or as a full tab.
+	 *
+	 * A sidebar is 290px, and 2,000 documents with a title, a state and a position do not fit
+	 * in 290px — the labels truncate before the counts are even readable. The tab is where the
+	 * library is actually usable; the sidebar is for glancing at what is in progress.
+	 */
+	private async revealLibrary(inTab = false): Promise<void> {
+		const existing = this.app.workspace
+			.getLeavesOfType(LIBRARY_VIEW_TYPE)
+			.filter((leaf) => inTab === (leaf.getRoot() === this.app.workspace.rootSplit));
+
 		if (existing.length > 0) {
 			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 
-		const leaf = this.app.workspace.getRightLeaf(false);
+		const leaf = inTab ? this.app.workspace.getLeaf("tab") : this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
+
 		await leaf.setViewState({ type: LIBRARY_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
 	}

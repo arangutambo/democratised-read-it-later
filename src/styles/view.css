@@ -414,11 +414,20 @@
  * four landed with equal weight, so nothing read. Bounded boxes rather than a row of words,
  * because a shared border is what makes them read as one group of choices.
  */
+/*
+ * Wraps rather than truncates.
+ *
+ * Four fixed columns in a 290px sidebar gave each chip ~62px, which is not enough for the word
+ * "READING" — the labels clipped to "READI…" and "UNREA…", so the one thing the chip existed
+ * to say was the thing that got cut. `auto-fit` with a real minimum lets them fall to two rows
+ * in a sidebar and sit in one across a tab.
+ */
 .reader-library-chips {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
 	gap: var(--size-2-2);
 	padding: 0 0 var(--size-2-3);
+	container-type: inline-size;
 }
 
 .reader-library-chip {
@@ -450,13 +459,17 @@
 }
 
 /* Supporting text that must not compete with the figure above it. */
+/*
+ * Supporting text that must not compete with the figure — and must stay whole.
+ * The letter-spacing goes when there is no room for it; a clipped word is worse than a tight
+ * one.
+ */
 .reader-library-chip-label {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
 }
 
 /* Says why the list stopped, so a short list is never mistaken for the whole shelf. */
@@ -802,4 +815,30 @@
 .reader-switcher-detail {
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
+}
+
+/*
+ * The shelf in a tab, where it has room to be a shelf.
+ *
+ * A sidebar can only ever show a title; given the width, a row can carry what the document is,
+ * how far in you are and how much has come out of it without any of it competing.
+ */
+.workspace-leaf-content[data-type="reader-library"] .view-content {
+	padding-inline: var(--size-4-4);
+}
+
+.reader-library-list {
+	max-width: 60em;
+	margin-inline: auto;
+}
+
+.reader-library-header,
+.reader-library-chips {
+	max-width: 60em;
+	margin-inline: auto;
+}
+
+/* Full page: the document and nothing else. */
+.reader-view.is-full-page .reader-outline {
+	display: none;
 }
