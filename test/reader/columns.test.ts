@@ -118,3 +118,32 @@ describe("runBetween", () => {
 		expect(runBetween([], { x: 0, y: 0 }, { x: 1, y: 1 })).toEqual([]);
 	});
 });
+
+describe("reading order as the text layer's DOM order", () => {
+	it("puts a whole column before the next one starts", () => {
+		/*
+		 * The reason this matters is not tidiness. A browser selection follows DOM order, and
+		 * the text layer's spans are absolutely positioned — so their order is invisible until
+		 * you drag across them. With pdf.js's own order the browser painted its selection over
+		 * every span lying between the two ends in the markup, which on a two-column page meant
+		 * fragments lit up across the whole thing.
+		 */
+		const order = readingOrder(twoColumnPage());
+		const firstCaption = order.findIndex((s) => s.text.startsWith("caption"));
+		const lastBody = order.map((s) => s.text.startsWith("body")).lastIndexOf(true);
+
+		expect(lastBody).toBeLessThan(firstCaption);
+	});
+
+	it("is stable, so the same page always lays out the same way", () => {
+		const once = readingOrder(twoColumnPage()).map((s) => s.text);
+		const twice = readingOrder(twoColumnPage()).map((s) => s.text);
+		expect(once).toEqual(twice);
+	});
+
+	it("keeps every span", () => {
+		// Reordering must never drop one; a missing span is a hole in the selectable text.
+		const page = twoColumnPage();
+		expect(readingOrder(page)).toHaveLength(page.length);
+	});
+});

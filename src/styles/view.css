@@ -841,11 +841,6 @@
 	margin-inline: auto;
 }
 
-/* Full page: the document and nothing else. */
-.reader-view.is-full-page .reader-outline {
-	display: none;
-}
-
 /* The shelf's status line: one sentence, for anyone who cannot see the counts. */
 .reader-library-status {
 	padding: 0 var(--size-2-3) var(--size-2-2);

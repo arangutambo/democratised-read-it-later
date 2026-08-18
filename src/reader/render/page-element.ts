@@ -12,6 +12,7 @@
  * itself, and this way copy, double-click-to-select-word and shift-click all work for free.
  */
 
+import { readingOrder } from "../gesture/columns";
 import type { NormalisedRect } from "../../capture/types";
 import type { TextSpan } from "../surface/pdf";
 import { toScreen } from "../gesture/region";
@@ -88,10 +89,23 @@ export function releaseCanvas(page: PageElement): void {
  */
 export function setTextLayer(
 	page: PageElement,
-	spans: TextSpan[],
+	unordered: TextSpan[],
 	cssWidth: number,
 	cssHeight: number,
 ): void {
+	/*
+	 * Built in reading order, not in the order pdf.js emits.
+	 *
+	 * This is what a browser selection follows. The spans are absolutely positioned, so their
+	 * DOM order is invisible until you drag across them — and on a two-column page pdf.js's
+	 * order zigzags between the body text and the figure caption beside it. The browser then
+	 * paints its selection over every span lying between the two in the markup, which is why
+	 * selecting one sentence lit up fragments scattered across the whole page.
+	 *
+	 * Sorting here fixes it at the source: the selection the browser paints, the text
+	 * `toString()` returns, and the spans a capture walks are all the same thing again.
+	 */
+	const spans = readingOrder(unordered);
 	const fragment = document.createDocumentFragment();
 	const parts: string[] = [];
 	const created: { el: HTMLElement; target: number }[] = [];
@@ -135,7 +149,7 @@ export function setTextLayer(
 
 	page.textLayer.replaceChildren(fragment);
 	// Same order as the child elements, so a covered element maps back to its span.
-	page.spans = [...spans];
+	page.spans = spans;
 
 	/*
 	 * Scale each span to the width the PDF gives it.
