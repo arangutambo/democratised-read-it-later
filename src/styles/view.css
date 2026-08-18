@@ -862,3 +862,11 @@
 	resize: vertical;
 	margin-bottom: var(--size-4-2);
 }
+
+/* Paste a link. */
+.reader-url-input {
+	width: 100%;
+	font-size: var(--font-ui-medium);
+	padding: var(--size-2-2) var(--size-2-3);
+	margin-bottom: var(--size-4-2);
+}

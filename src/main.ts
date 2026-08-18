@@ -87,6 +87,12 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "save-url-to-reader",
+			name: "Save a page to Reader",
+			callback: () => void this.saveUrl(),
+		});
+
+		this.addCommand({
 			id: "import-readwise",
 			name: "Import from a Readwise export",
 			callback: () => void this.importReadwise(),
@@ -564,6 +570,21 @@ export default class ReaderPlugin extends Plugin {
 	 * gigabyte of files, which is not something to start from the command palette and find out
 	 * about afterwards. The modal shows exactly what would be written before anything is.
 	 */
+	/**
+	 * Paste a URL, get a document.
+	 *
+	 * The only command that reaches the network without an API key, and only when you ask it
+	 * to. What it writes is a local file — the site going away later does not take your copy.
+	 */
+	private async saveUrl(): Promise<void> {
+		const { SaveUrlModal } = await import("./web/save");
+
+		new SaveUrlModal(this.app, {
+			documentsFolder: this.settings.decksFolder,
+			onSaved: (path) => void this.openReaderFile(path),
+		}).open();
+	}
+
 	private async importReadwise(): Promise<void> {
 		if (!this.settings.features.readwiseImport) {
 			new Notice("Reader: enable the Readwise import in settings first.");
