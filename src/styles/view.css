@@ -429,6 +429,8 @@
 	text-align: center;
 	cursor: pointer;
 	min-width: 0;
+	/* A control you hit, not text you read: never smaller than a fingertip. */
+	min-height: 44px;
 }
 
 .reader-library-chip:hover {
@@ -473,6 +475,7 @@
 	border-radius: var(--radius-s);
 	cursor: pointer;
 	position: relative;
+	min-height: 44px;
 }
 
 .reader-library-row:hover {
@@ -641,7 +644,9 @@
 .reader-remote-image {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: var(--size-2-2);
+	min-height: 44px;
 	padding: var(--size-2-1) var(--size-2-3);
 	border: 1px dashed var(--background-modifier-border);
 	border-radius: var(--radius-s);
@@ -669,12 +674,16 @@
 /*
  * A video, above its transcript.
  *
- * Stacked rather than side by side: both stay in view, which is the working arrangement —
- * you watch, and you clip the sentence that was just said. The player is pinned so it does
- * not scroll away underneath a long transcript.
+ * Stacked rather than side by side: both stay in view, which is the working arrangement — you
+ * watch, and you clip the sentence that was just said.
+ *
+ * A flex column rather than percentage heights. The player takes the height its aspect ratio
+ * asks for and the transcript takes the rest, so the two always sum to the pane and the video
+ * is never distorted — percentages could not promise either.
  */
 .reader-scroller.is-video {
-	display: block;
+	display: flex;
+	flex-direction: column;
 	padding: 0;
 	align-items: stretch;
 	overflow: hidden;
@@ -682,12 +691,11 @@
 }
 
 .reader-video-player {
-	position: sticky;
-	top: 0;
-	z-index: 1;
+	flex: 0 0 auto;
 	width: 100%;
-	aspect-ratio: 16 / 9;
+	/* Never more than half the pane, so the transcript is always workable. */
 	max-height: 50%;
+	aspect-ratio: 16 / 9;
 	background-color: #000;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
@@ -700,11 +708,10 @@
 }
 
 .reader-transcript {
-	height: 50%;
+	flex: 1 1 auto;
+	min-height: 0;
 	overflow-y: auto;
 	padding: var(--size-4-4) var(--size-4-6);
-	max-width: var(--reader-measure, 66ch);
-	margin-inline: auto;
 	user-select: text;
 }
 
@@ -713,17 +720,28 @@
 	gap: var(--size-4-3);
 	padding: var(--size-2-2) 0;
 	line-height: var(--line-height-normal);
+	max-width: var(--reader-measure, 66ch);
+	margin-inline: auto;
 }
 
-/* A handle for jumping, never something written into a note. */
+/*
+ * A handle for jumping, never something written into a note.
+ *
+ * 44px tall because it is a target you hit, not text you read — the smallest control anyone
+ * should be asked to hit accurately.
+ */
 .reader-transcript-time {
 	flex: 0 0 3.5em;
+	display: flex;
+	align-items: flex-start;
+	min-height: 44px;
+	padding-top: 0.15em;
 	color: var(--text-accent);
 	font-variant-numeric: tabular-nums;
 	font-size: var(--font-ui-smaller);
 	cursor: pointer;
 	user-select: none;
-	padding-top: 0.15em;
+	border-radius: var(--radius-s);
 }
 
 .reader-transcript-time:hover {
@@ -733,4 +751,21 @@
 .reader-transcript-text {
 	flex: 1;
 	min-width: 0;
+}
+
+/*
+ * Keyboard focus, everywhere it can land.
+ *
+ * These are all divs acting as controls, which get no focus ring for free. Without one the
+ * pane is unusable without a mouse — and the reader's whole argument is that your hands stay
+ * on the keyboard.
+ */
+.reader-library-chip:focus-visible,
+.reader-library-row:focus-visible,
+.reader-transcript-time:focus-visible,
+.reader-remote-image:focus-visible,
+.reader-outline-item:focus-visible,
+.reader-search-hit:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
 }

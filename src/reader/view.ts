@@ -1265,7 +1265,17 @@ export class ReaderView extends TextFileView {
 
 			// The clock is a handle for jumping, never something written into a note.
 			const time = row.createDiv({ cls: "reader-transcript-time", text: clockOf(paragraph.start) });
+			time.setAttribute("role", "button");
+			time.setAttribute("tabindex", "0");
+			time.setAttribute("aria-label", `Play from ${clockOf(paragraph.start)}`);
+
 			this.registerDomEvent(time, "click", () => this.seekTo(paragraph.start));
+			this.registerDomEvent(time, "keydown", (event) => {
+				if (event.key !== "Enter" && event.key !== " ") return;
+				event.preventDefault();
+				event.stopPropagation();
+				this.seekTo(paragraph.start);
+			});
 
 			row.createDiv({ cls: "reader-transcript-text", text: paragraph.text });
 		}

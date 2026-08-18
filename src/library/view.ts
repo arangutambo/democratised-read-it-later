@@ -26,6 +26,25 @@ import {
 
 export const LIBRARY_VIEW_TYPE = "reader-library";
 
+/**
+ * Make a div behave like the button it looks like.
+ *
+ * A div with a click handler is invisible to the keyboard and to a screen reader, which for a
+ * pane whose whole argument is that your hands stay on the keyboard is not a detail.
+ */
+function asButton(el: HTMLElement, label: string, activate: () => void): void {
+	el.setAttribute("role", "button");
+	el.setAttribute("tabindex", "0");
+	el.setAttribute("aria-label", label);
+
+	el.addEventListener("click", activate);
+	el.addEventListener("keydown", (event: KeyboardEvent) => {
+		if (event.key !== "Enter" && event.key !== " ") return;
+		event.preventDefault();
+		activate();
+	});
+}
+
 export interface LibraryDeps {
 	/** Page counts, once a document has been opened. Filled by the reader view. */
 	pageCounts: Map<string, number>;
@@ -261,7 +280,7 @@ export class LibraryView extends ItemView {
 			el.createDiv({ cls: "reader-library-chip-count", text: String(chip.count) });
 			el.createDiv({ cls: "reader-library-chip-label", text: chip.label });
 
-			this.registerDomEvent(el, "click", () => {
+			asButton(el, `${chip.label}: ${chip.count} documents`, () => {
 				this.state = chip.key;
 				this.drawn = PAGE;
 				this.render();
@@ -287,7 +306,7 @@ export class LibraryView extends ItemView {
 				`${Math.round(entry.progress * 100)}%`;
 		}
 
-		this.registerDomEvent(row, "click", () => this.deps.onOpen(entry.path));
+		asButton(row, entry.title, () => this.deps.onOpen(entry.path));
 	}
 
 	protected override async onClose(): Promise<void> {
