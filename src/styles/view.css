@@ -407,6 +407,64 @@
 	min-width: 0;
 }
 
+/*
+ * State, as four counts.
+ *
+ * The figure carries the chip: at the label's size there was no contrast between them and all
+ * four landed with equal weight, so nothing read. Bounded boxes rather than a row of words,
+ * because a shared border is what makes them read as one group of choices.
+ */
+.reader-library-chips {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--size-2-2);
+	padding: 0 0 var(--size-2-3);
+}
+
+.reader-library-chip {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background-color: var(--background-primary);
+	padding: var(--size-2-2) var(--size-2-1);
+	text-align: center;
+	cursor: pointer;
+	min-width: 0;
+}
+
+.reader-library-chip:hover {
+	border-color: var(--interactive-accent);
+}
+
+.reader-library-chip.is-active {
+	border-color: var(--interactive-accent);
+	background-color: var(--background-modifier-hover);
+}
+
+.reader-library-chip-count {
+	font-size: 1.35em;
+	font-weight: 650;
+	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Supporting text that must not compete with the figure above it. */
+.reader-library-chip-label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Says why the list stopped, so a short list is never mistaken for the whole shelf. */
+.reader-library-more {
+	padding: var(--size-4-2) var(--size-2-3);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	text-align: center;
+}
+
 .reader-library-row {
 	display: flex;
 	align-items: center;
@@ -429,6 +487,15 @@
 
 .reader-library-row.is-finished .reader-library-icon {
 	color: var(--text-success);
+}
+
+/* The one thing on screen that is live. Unread rows are the background, not the subject. */
+.reader-library-row.is-reading .reader-library-icon {
+	color: var(--interactive-accent);
+}
+
+.reader-library-row.is-reading .reader-library-title {
+	font-weight: var(--font-medium);
 }
 
 .reader-library-text {
