@@ -134,7 +134,10 @@ export default class ReaderPlugin extends Plugin {
 					pageBudget: Platform.isMobile ? 3 : 5,
 					onPageCount: (path, pages) => {
 						this.pageCounts.set(path, pages);
-						void this.refreshLibrary();
+						// One entry, not a rescan — see LibraryView.setPageCount.
+						for (const leaf of this.app.workspace.getLeavesOfType(LIBRARY_VIEW_TYPE)) {
+							(leaf.view as LibraryView).setPageCount(path, pages);
+						}
 					},
 					log: this.log,
 				}),

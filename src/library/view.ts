@@ -17,6 +17,7 @@ import {
 	filterEntries,
 	ofState,
 	sortEntries,
+	stateOf,
 	subtitleOf,
 	toEntry,
 	type LibraryEntry,
@@ -51,6 +52,14 @@ export interface LibraryDeps {
 	onOpen: (path: string) => void;
 }
 
+/** Progress and state, recomputed when a page count finally arrives. */
+function derivedFrom(entry: LibraryEntry, pages: number): Pick<LibraryEntry, "progress" | "state"> {
+	return {
+		progress: pages > 0 ? Math.min(1, entry.page / pages) : undefined,
+		state: stateOf(entry.page, pages, entry.clips),
+	};
+}
+
 /** Rows drawn before the list waits for you to scroll. */
 const PAGE = 60;
 
@@ -65,6 +74,16 @@ export class LibraryView extends ItemView {
 	 * 2,088 file reads. Keyed by path, one change touches one entry.
 	 */
 	private readonly entries = new Map<string, LibraryEntry>();
+
+	/**
+	 * The last computed list, and the inputs it was computed from.
+	 *
+	 * `shown()` sorts 2,088 entries with `localeCompare`, which is not cheap, and the scroll
+	 * handler called it on every scroll event — thousands of full locale sorts a second, which
+	 * is enough to lock the window. It is recomputed when something it depends on changes and
+	 * not otherwise.
+	 */
+	private cache?: { key: string; rows: LibraryEntry[] };
 
 	private query = "";
 	private sort: SortKey = "recent";
@@ -133,11 +152,12 @@ export class LibraryView extends ItemView {
 
 		// Draw more only as they are needed; 2,088 rows at once misses Doherty by seconds.
 		this.registerDomEvent(root, "scroll", () => {
+			// Cheap guard first: this runs on every scroll event, and `shown()` is not free.
 			if (root.scrollTop + root.clientHeight < root.scrollHeight - 400) return;
 			if (this.drawn >= this.shown().length) return;
 
 			this.drawn += PAGE;
-			this.render();
+			this.scheduleRender();
 		});
 
 		/*
@@ -150,12 +170,14 @@ export class LibraryView extends ItemView {
 		this.registerEvent(this.app.vault.on("create", (file) => void this.touch(file.path)));
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
-				if (this.entries.delete(file.path)) this.render();
+				if (!this.entries.delete(file.path)) return;
+				this.revision++;
+				this.scheduleRender();
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on("rename", (file, oldPath) => {
-				this.entries.delete(oldPath);
+				if (this.entries.delete(oldPath)) this.revision++;
 				void this.touch(file.path);
 			}),
 		);
@@ -173,7 +195,8 @@ export class LibraryView extends ItemView {
 		const entry = await this.readEntry(file);
 		if (entry) {
 			this.entries.set(path, entry);
-			this.render();
+			this.revision++;
+			this.scheduleRender();
 		}
 	}
 
@@ -193,14 +216,40 @@ export class LibraryView extends ItemView {
 		}
 	}
 
-	/** Read every `.reader` in the vault. Only on open — after that, one file at a time. */
+	/**
+	 * One document's page count, once the reader has worked it out.
+	 *
+	 * Deliberately not a rescan. This fires every time a document is opened, and rescanning the
+	 * vault for it meant 2,088 file reads behind opening a single PDF.
+	 */
+	setPageCount(path: string, pages: number): void {
+		const entry = this.entries.get(path);
+		if (!entry || entry.pages === pages) return;
+
+		this.entries.set(path, { ...entry, pages, ...derivedFrom(entry, pages) });
+		this.revision++;
+		this.scheduleRender();
+	}
+
+	/**
+	 * Read every `.reader` in the vault. Only on open — after that, one file at a time.
+	 *
+	 * Yields every so often. 2,088 sequential reads with no break starve the event loop for
+	 * long enough that the window stops responding, which is indistinguishable from a hang.
+	 */
 	async refresh(): Promise<void> {
 		const files = this.app.vault.getFiles().filter((file) => file.extension === "reader");
 
 		this.entries.clear();
-		for (const file of files) {
+		for (const [i, file] of files.entries()) {
 			const entry = await this.readEntry(file);
 			if (entry) this.entries.set(file.path, entry);
+
+			if (i % 100 === 99) {
+				this.revision++;
+				this.render();
+				await new Promise((resolve) => window.setTimeout(resolve, 0));
+			}
 		}
 
 		/*
@@ -217,11 +266,43 @@ export class LibraryView extends ItemView {
 		this.render();
 	}
 
-	/** The entries currently on show, in order. */
+	/** The entries currently on show, in order. Cached; see `cache`. */
 	private shown(): LibraryEntry[] {
+		const key = `${this.state}\u0000${this.query}\u0000${this.sort}\u0000${this.entries.size}\u0000${this.revision}`;
+		if (this.cache?.key === key) return this.cache.rows;
+
 		const all = [...this.entries.values()];
-		return sortEntries(filterEntries(ofState(all, this.state), this.query), this.sort);
+		const rows = sortEntries(filterEntries(ofState(all, this.state), this.query), this.sort);
+
+		this.cache = { key, rows };
+		return rows;
 	}
+
+	/**
+	 * Bumped whenever an entry's contents change.
+	 *
+	 * The map's size does not move when a `.reader` is merely rewritten, which is the common
+	 * case — a clip changes a document without adding one — so size alone cannot tell the
+	 * cache it is stale.
+	 */
+	private revision = 0;
+
+	/**
+	 * Redraw, at most once a frame.
+	 *
+	 * `modify` fires for every `.reader` write, and a burst of them — an import, a sync — used
+	 * to mean a burst of full redraws.
+	 */
+	private scheduleRender(): void {
+		if (this.pendingRender !== undefined) return;
+
+		this.pendingRender = window.requestAnimationFrame(() => {
+			this.pendingRender = undefined;
+			this.render();
+		});
+	}
+
+	private pendingRender?: number;
 
 	private render(): void {
 		if (!this.listEl) return;
@@ -310,6 +391,7 @@ export class LibraryView extends ItemView {
 	}
 
 	protected override async onClose(): Promise<void> {
+		if (this.pendingRender !== undefined) window.cancelAnimationFrame(this.pendingRender);
 		this.contentEl.empty();
 	}
 }
