@@ -106,6 +106,17 @@ export class TextFileView extends EditableFileView {
 export class TFile {}
 export class TFolder {}
 
+/**
+ * The HTTP escape hatch.
+ *
+ * A plugin runs in the renderer, where `fetch` to a third-party API is blocked by CORS, so
+ * this is the only route out. Stubbed to refuse loudly: a test that reaches the network is a
+ * test that is slow, flaky, and spending money.
+ */
+export async function requestUrl(_options: unknown): Promise<never> {
+	throw new Error("requestUrl was called in a test — stub it explicitly.");
+}
+
 export function setIcon(_el: HTMLElement, _icon: string): void {}
 
 export const Platform = { isDesktopApp: true, isMacOS: true, isMobile: false };
