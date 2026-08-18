@@ -266,6 +266,50 @@ export class FuzzySuggestModal<T> {
 	close(): void {}
 }
 
+/** The right-click menu. Items record themselves so a test can assert what was offered. */
+export class Menu {
+	readonly items: { title: string; icon?: string; click?: () => void }[] = [];
+	separators = 0;
+
+	addItem(build: (item: MenuItem) => unknown): this {
+		const item = new MenuItem();
+		build(item);
+		this.items.push({ title: item.title, icon: item.icon, click: item.clickHandler });
+		return this;
+	}
+
+	addSeparator(): this {
+		this.separators++;
+		return this;
+	}
+
+	showAtMouseEvent(_event: unknown): this {
+		return this;
+	}
+}
+
+export class MenuItem {
+	title = "";
+	icon?: string;
+	clickHandler?: () => void;
+
+	setTitle(title: string): this {
+		this.title = title;
+		return this;
+	}
+	setIcon(icon: string): this {
+		this.icon = icon;
+		return this;
+	}
+	setChecked(_checked: boolean): this {
+		return this;
+	}
+	onClick(handler: () => void): this {
+		this.clickHandler = handler;
+		return this;
+	}
+}
+
 export class Modal {
 	contentEl = {
 		empty: (): void => {},

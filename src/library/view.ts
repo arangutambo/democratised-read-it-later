@@ -9,9 +9,11 @@
  * Everything is derived from the `.reader` files themselves, so there is no index to go stale.
  */
 
-import { ItemView, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, TFile, type WorkspaceLeaf } from "obsidian";
 
 import { parseDocument } from "../reader/document";
+import { ConfirmModal } from "./confirm";
+import { describeRemoval, writtenCharsIn, type RemovalPlan } from "./remove";
 import {
 	countsByState,
 	filterEntries,
@@ -388,6 +390,109 @@ export class LibraryView extends ItemView {
 		}
 
 		asButton(row, entry.title, () => this.deps.onOpen(entry.path));
+		this.registerDomEvent(row, "contextmenu", (event) => {
+			event.preventDefault();
+			this.showRowMenu(event, entry);
+		});
+	}
+
+	/** The usual right-click menu, with removal at the bottom behind a separator. */
+	private showRowMenu(event: MouseEvent, entry: LibraryEntry): void {
+		const menu = new Menu();
+
+		menu.addItem((item) =>
+			item
+				.setTitle("Open in Reader")
+				.setIcon("book-open")
+				.onClick(() => this.deps.onOpen(entry.path)),
+		);
+
+		menu.addItem((item) =>
+			item
+				.setTitle("Open the note")
+				.setIcon("file-text")
+				.onClick(() => void this.app.workspace.openLinkText(entry.notePath, "", false)),
+		);
+
+		menu.addSeparator();
+
+		/*
+		 * Two removals, because the three files behind a row are not equally replaceable. The
+		 * `.reader` is bookkeeping; the note may hold a semester of your writing.
+		 */
+		menu.addItem((item) =>
+			item
+				.setTitle("Remove from library")
+				.setIcon("minus-circle")
+				.onClick(() => void this.confirmRemoval(entry, false)),
+		);
+
+		menu.addItem((item) =>
+			item
+				.setTitle("Delete document and note…")
+				.setIcon("trash-2")
+				.onClick(() => void this.confirmRemoval(entry, true)),
+		);
+
+		menu.showAtMouseEvent(event);
+	}
+
+	private async confirmRemoval(entry: LibraryEntry, everything: boolean): Promise<void> {
+		const plan = await this.planRemoval(entry);
+
+		new ConfirmModal(this.app, {
+			title: everything ? `Delete “${entry.title}”?` : `Remove “${entry.title}” from the library?`,
+			body: `${describeRemoval(plan, everything)} Everything goes to trash, so this can be undone.`,
+			confirmText: everything ? "Delete" : "Remove",
+			onConfirm: () => void this.remove(plan, everything),
+		}).open();
+	}
+
+	private async planRemoval(entry: LibraryEntry): Promise<RemovalPlan> {
+		const note = this.app.vault.getAbstractFileByPath(entry.notePath);
+		const written = note instanceof TFile ? writtenCharsIn(await this.app.vault.read(note)) : 0;
+
+		return {
+			readerPath: entry.path,
+			notePath: note instanceof TFile ? entry.notePath : undefined,
+			documentPath:
+				this.app.vault.getAbstractFileByPath(entry.sourcePath) instanceof TFile
+					? entry.sourcePath
+					: undefined,
+			writtenChars: written,
+			clips: entry.clips,
+		};
+	}
+
+	/**
+	 * Trash, never delete.
+	 *
+	 * `trashFile` follows whatever the vault is configured for — system trash, the vault's own
+	 * `.trash`, or permanent if that is what you chose. Choosing on your behalf is not this
+	 * plugin's call, and a wrong answer here should be recoverable.
+	 */
+	private async remove(plan: RemovalPlan, everything: boolean): Promise<void> {
+		const paths = [plan.readerPath, ...(everything ? [plan.notePath, plan.documentPath] : [])];
+		let removed = 0;
+
+		for (const path of paths) {
+			if (!path) continue;
+
+			const file = this.app.vault.getAbstractFileByPath(path);
+			if (!(file instanceof TFile)) continue;
+
+			try {
+				await this.app.fileManager.trashFile(file);
+				removed++;
+			} catch (error) {
+				new Notice(`Reader: could not remove ${path}.`);
+				console.error("[reader] removal failed", error);
+			}
+		}
+
+		// The vault events rebuild the shelf, but say what happened rather than let a row
+		// simply vanish.
+		new Notice(`Reader: moved ${removed} file${removed === 1 ? "" : "s"} to trash.`);
 	}
 
 	protected override async onClose(): Promise<void> {
