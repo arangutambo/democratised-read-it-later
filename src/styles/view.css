@@ -481,6 +481,15 @@
 	width: min(100%, 40em);
 	height: auto;
 	aspect-ratio: auto;
+	/*
+	 * Containment off, or the section has no height at all.
+	 *
+	 * `.reader-page` is a `container-type: size` so a PDF's text layer can size itself in `cqh`.
+	 * Size containment means the element's own size cannot depend on its contents — so a
+	 * section, whose entire height *is* its contents, collapsed to nothing and rendered blank.
+	 * A section has no text layer and needs no container.
+	 */
+	container-type: normal;
 	padding: var(--size-4-6) var(--size-4-8);
 	line-height: var(--line-height-normal);
 	user-select: text;

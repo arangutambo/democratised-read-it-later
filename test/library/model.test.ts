@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	countsByState,
 	filterEntries,
+	ofState,
 	sortEntries,
 	stateOf,
 	subtitleOf,
@@ -141,5 +143,52 @@ describe("subtitleOf", () => {
 
 	it("keeps the singular singular", () => {
 		expect(subtitleOf({ page: 1, clips: 1 } as LibraryEntry)).toBe("1 clip");
+	});
+});
+
+/** An entry in a given reading state, built the way the shelf actually builds one. */
+function entry(o: { page: number; pages?: number; clips: number }): LibraryEntry {
+	const clips: Record<string, unknown> = {};
+	for (let i = 0; i < o.clips; i++) clips[`c${i}`] = { surface: { kind: "pdf-page", index: 1 } };
+
+	return toEntry({
+		path: `Sources/${o.page}-${o.clips}.reader`,
+		document: doc({ view: { surface: o.page, zoom: 1, scroll: 0 }, clips: clips as never }),
+		modified: 0,
+		pages: o.pages,
+	});
+}
+
+describe("countsByState", () => {
+	it("counts each state", () => {
+		/*
+		 * The shelf leads with these because a Readwise import lands ~2,100 documents at once,
+		 * and "2,088 things" is not a fact you can act on. "12 reading" is.
+		 */
+		const entries = [
+			entry({ page: 1, clips: 0 }),
+			entry({ page: 4, clips: 2 }),
+			entry({ page: 10, pages: 10, clips: 1 }),
+		];
+
+		expect(countsByState(entries)).toEqual({ unread: 1, reading: 1, finished: 1 });
+	});
+
+	it("is all zeroes for an empty shelf", () => {
+		expect(countsByState([])).toEqual({ unread: 0, reading: 0, finished: 0 });
+	});
+});
+
+describe("ofState", () => {
+	it("keeps only the state asked for", () => {
+		const entries = [entry({ page: 1, clips: 0 }), entry({ page: 4, clips: 2 })];
+
+		expect(ofState(entries, "unread")).toHaveLength(1);
+		expect(ofState(entries, "reading")).toHaveLength(1);
+	});
+
+	it("passes everything through for 'all'", () => {
+		const entries = [entry({ page: 1, clips: 0 }), entry({ page: 4, clips: 2 })];
+		expect(ofState(entries, "all")).toHaveLength(2);
 	});
 });

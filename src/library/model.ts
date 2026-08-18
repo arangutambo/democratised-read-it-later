@@ -116,3 +116,18 @@ export function subtitleOf(entry: LibraryEntry): string {
 
 	return parts.join(" · ");
 }
+
+/** How many documents sit in each state. The shelf leads with these. */
+export function countsByState(entries: readonly LibraryEntry[]): Record<ReadingState, number> {
+	const counts: Record<ReadingState, number> = { unread: 0, reading: 0, finished: 0 };
+	for (const entry of entries) counts[entry.state]++;
+	return counts;
+}
+
+/** Entries in one state, or all of them. */
+export function ofState(
+	entries: readonly LibraryEntry[],
+	state: ReadingState | "all",
+): LibraryEntry[] {
+	return state === "all" ? [...entries] : entries.filter((entry) => entry.state === state);
+}
