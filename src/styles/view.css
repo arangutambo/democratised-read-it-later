@@ -690,14 +690,27 @@
 	background-color: var(--background-primary);
 }
 
-.reader-video-player {
+/* Owns the height; never more than this share of the pane, so the transcript stays workable. */
+.reader-video-stage {
 	flex: 0 0 auto;
-	width: 100%;
-	/* Never more than half the pane, so the transcript is always workable. */
-	max-height: 50%;
-	aspect-ratio: 16 / 9;
+	height: 45%;
+	display: flex;
+	justify-content: center;
 	background-color: #000;
 	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/*
+ * As large as fits, and no larger.
+ *
+ * Height comes from the stage and width follows from 16:9, so the video scales with the pane
+ * instead of being stretched to it. `max-width` is what stops a short, wide pane from pushing
+ * it past the edge; it letterboxes against the stage rather than distorting.
+ */
+.reader-video-player {
+	height: 100%;
+	aspect-ratio: 16 / 9;
+	max-width: 100%;
 }
 
 .reader-video-player iframe {
@@ -715,13 +728,22 @@
 	user-select: text;
 }
 
+/*
+ * One column, gutter included.
+ *
+ * The measure applies to the block rather than to each paragraph, so the timestamps line up
+ * against a single left edge instead of floating in the middle of the pane.
+ */
+.reader-transcript-body {
+	max-width: var(--reader-measure, 66ch);
+	margin-inline: auto;
+}
+
 .reader-transcript-para {
 	display: flex;
 	gap: var(--size-4-3);
 	padding: var(--size-2-2) 0;
 	line-height: var(--line-height-normal);
-	max-width: var(--reader-measure, 66ch);
-	margin-inline: auto;
 }
 
 /*

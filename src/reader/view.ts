@@ -1234,7 +1234,16 @@ export class ReaderView extends TextFileView {
 		this.scroller.empty();
 		this.scroller.addClass("is-video");
 
-		const player = this.scroller.createDiv({ cls: "reader-video-player" });
+		/*
+		 * A stage, then the player inside it.
+		 *
+		 * The stage owns the height — a fixed share of the pane — and the player takes 16:9
+		 * within it. Sizing the player directly meant `width: 100%` won, so on a wide pane the
+		 * video grew until it crowded the transcript out. This way it is as large as fits and
+		 * no larger, centred, and the stage's black absorbs whatever is left over.
+		 */
+		const stage = this.scroller.createDiv({ cls: "reader-video-stage" });
+		const player = stage.createDiv({ cls: "reader-video-player" });
 		this.playerEl = player;
 
 		/*
@@ -1258,8 +1267,10 @@ export class ReaderView extends TextFileView {
 			return;
 		}
 
+		const body = transcript.createDiv({ cls: "reader-transcript-body" });
+
 		for (const paragraph of video.transcript) {
-			const row = transcript.createDiv({ cls: "reader-transcript-para" });
+			const row = body.createDiv({ cls: "reader-transcript-para" });
 			row.dataset.page = String(paragraph.index);
 			row.dataset.start = String(paragraph.start);
 
