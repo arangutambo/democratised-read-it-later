@@ -9,7 +9,7 @@
  * the same wherever Obsidian runs and never reaches outside what you handed it.
  */
 
-import { Modal, Notice, Setting, type App } from "obsidian";
+import { Modal, Notice, Setting, type App, type ButtonComponent } from "obsidian";
 
 import { ZipArchive } from "../../epub/zip";
 import { parseExport } from "./export";
@@ -32,7 +32,16 @@ export class ReadwiseImportModal extends Modal {
 	private cancelled = false;
 
 	private summaryEl!: HTMLElement;
-	private importButton?: HTMLButtonElement;
+
+	/**
+	 * The component, not its element.
+	 *
+	 * `ButtonComponent` keeps its own `disabled` flag and its click listener returns early on
+	 * it — `if (this.disabled || !callback) return`. Clearing the DOM attribute alone leaves
+	 * that flag set, so the button renders enabled, receives the click, and silently discards
+	 * it. Only `setDisabled` moves both.
+	 */
+	private importButton?: ButtonComponent;
 
 	constructor(app: App, options: ReadwiseImportOptions) {
 		super(app);
@@ -98,7 +107,7 @@ export class ReadwiseImportModal extends Modal {
 				}),
 			)
 			.addButton((button) => {
-				this.importButton = button.buttonEl;
+				this.importButton = button;
 				button
 					.setButtonText("Import")
 					.setCta()
@@ -149,7 +158,7 @@ export class ReadwiseImportModal extends Modal {
 		if (this.running) return;
 
 		this.summaryEl.empty();
-		this.importButton?.toggleAttribute("disabled", this.csv === undefined);
+		this.importButton?.setDisabled(this.csv === undefined);
 
 		if (this.csv === undefined) {
 			this.summaryEl.setText("Choose the export CSV to see what would be imported.");
@@ -200,7 +209,7 @@ export class ReadwiseImportModal extends Modal {
 		if (this.csv === undefined || this.running) return;
 
 		this.running = true;
-		this.importButton?.setAttribute("disabled", "true");
+		this.importButton?.setDisabled(true);
 		this.summaryEl.empty();
 
 		const progress = this.summaryEl.createDiv({ text: "Starting…" });
@@ -231,7 +240,7 @@ export class ReadwiseImportModal extends Modal {
 		} catch (error) {
 			this.running = false;
 			this.summaryEl.setText(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
-			this.importButton?.removeAttribute("disabled");
+			this.importButton?.setDisabled(false);
 		}
 	}
 

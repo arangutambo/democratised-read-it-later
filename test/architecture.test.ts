@@ -158,6 +158,31 @@ describe("architecture", () => {
 		expect([...imported].filter((name) => !exported.has(name)).sort()).toEqual([]);
 	});
 
+	it("never enables an Obsidian component through its DOM attribute", () => {
+		/*
+		 * Found in a real window: the Readwise import button rendered enabled, took the click,
+		 * and did nothing.
+		 *
+		 * `ButtonComponent` keeps a `disabled` flag of its own, and its click listener opens
+		 * with `if (this.disabled || !callback) return`. `setDisabled` moves that flag *and*
+		 * `buttonEl.disabled`; clearing the attribute alone moves only half, which is precisely
+		 * the state that looks fine and behaves broken. Obsidian's own code always pairs them.
+		 *
+		 * So: `setDisabled` is the only way to change it. Matching on the attribute name keeps
+		 * this honest without needing a faithful component stub.
+		 */
+		const offenders: string[] = [];
+
+		for (const file of walk(SRC)) {
+			const source = stripComments(readFileSync(file, "utf8"));
+			if (/(?:remove|toggle|set)Attribute\(\s*["']disabled["']/.test(source)) {
+				offenders.push(path.relative(SRC, file));
+			}
+		}
+
+		expect(offenders).toEqual([]);
+	});
+
 	it("every file named in PURE_FILES exists", () => {
 		// The named list is the half of the rule a rename can silently disable: a moved file
 		// simply stops being scanned, and the suite still reports green. Assert them present
