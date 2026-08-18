@@ -1,68 +1,233 @@
 # Reader
 
-A read-it-later, reader-mode, highlighting and research-capture system for Obsidian, with a
-Safari extension to follow. Reading, annotating and citing are meant to be the same act, over
-plain files you own.
+**Read the document inside Obsidian and choose what goes into your vault. Clip a
+passage or drag a box around a figure, have it land as a quote or an image, and
+type your own prose underneath it.**
 
-**Status: M5 (slides).** Apple Books highlights import into notes carrying a citekey, CSL frontmatter
-and a managed highlights region; the reader skin renders them; and the re-anchoring engine
-finds highlights again after their source has been edited; and lecture slide decks become
-study notes with the slide embedded and room to write under each one. 215 tests, no browser.
+Bulk-extracting a PDF into markdown gives you a transcript — something you read
+past, not something you write in. Reader inverts that: nothing enters your vault
+until you point at it. What you keep is a note you wrote, with the source's own
+words and figures anchored inside it.
 
-Measured against the real 1,177-highlight corpus, re-anchoring **mis-anchors 0% of highlights
-in every scenario** — it will orphan a highlight into the review queue rather than silently
-attach it to text you never highlighted. See `PLAN.md` §0.7 for the full table.
+![A PDF open in Reader with a highlighted passage on the left and the companion note on the right, showing the quote as a bullet with the reader's own prose nested underneath](docs/images/hero-clip-to-note.png)
 
-### Apple Books requires Full Disk Access
+```md
+- > A random-length gap is then inserted at the same, randomly chosen place. ^hl-01k9
+	- This is the operator that makes SAGA's search non-local — worth comparing
+	  to the block-move operator in §6.4.
+```
 
-`~/Library/Containers/com.apple.iBooksX/` is TCC-protected, so **Obsidian must be granted
-Full Disk Access** before the import can read it: System Settings → Privacy & Security →
-Full Disk Access → add Obsidian → quit and reopen Obsidian.
+That is the whole output format. A bullet with the clip, your writing nested
+underneath, and a block id so the highlight can find its way home.
 
-Without it the read does not fail cleanly — measured, it never returns at all. Every call
-against the Books databases is therefore wrapped in a timeout and reports the fix above
-rather than hanging Obsidian.
+- **PDFs, EPUBs, saved web articles, and YouTube transcripts.**
+- **Runs offline.** No network requests at all unless you switch on the optional
+  AI feature and supply your own key.
+- Desktop and mobile (Obsidian 1.9+); a few features are desktop-only and say so.
+- MIT licensed — see [LICENSE](LICENSE). Recent changes: [CHANGELOG.md](CHANGELOG.md).
 
-- [`DESIGN.md`](DESIGN.md) — the original design interrogation. Statement of intent.
-- [`PLAN.md`](PLAN.md) — what actually gets built, in what order. **Supersedes `DESIGN.md`
-  where they conflict**, and opens with five corrections the design got wrong.
+## Contents
+
+- [Getting started](#getting-started) — open your first document
+- [The keys](#the-keys) — the whole interaction surface
+- [How clipping works](#how-clipping-works) — quotes, figures, and the two-file contract
+- [Nesting and parents](#nesting-and-parents) — structure a note as you read
+- [The library](#the-library) — a shelf for what you are part-way through
+- [Sources](#sources) — PDFs · EPUBs · articles · video
+- [Leaving Readwise](#leaving-readwise) — import the export, no token
+- [Excalidraw handoff](#excalidraw-handoff) — send clipped figures to a drawing
+- [AI transcription](#ai-transcription-optional) — an equation to LaTeX, opt-in
+- [Settings](#settings) · [Limitations](#limitations) · [Development](#development)
+
+## Getting started
+
+1. **Install & enable.** Copy `main.js`, `manifest.json` and `styles.css` into
+   `.obsidian/plugins/reader/`, then Settings → Community plugins → enable
+   **Reader**.
+2. **Open a document.** Right-click any PDF, EPUB or `.html` in the file explorer
+   and choose **Open in Reader**. (Reader registers its own `.reader` file type
+   rather than taking over `.pdf`, so Obsidian's built-in PDF viewer keeps
+   working exactly as before.)
+3. **Clip something.** Select a sentence and press <kbd>q</kbd>. It lands in the
+   note beside the document, as a bullet, with your cursor on the line beneath it.
+4. **Write.** That indented line under the quote is yours.
+
+Opening a document creates two files in `Sources/`:
+
+| File | What it holds |
+| --- | --- |
+| `<name>.reader` | Where each clip came from — page, rectangle, quote anchor. Never rendered into a note. |
+| `<name>.md` | What you kept. An ordinary markdown note you can grep, link and edit by hand. |
+
+The split is the point: the note stays clean and citable, and the provenance —
+the coordinates, the anchors, the ugly part — lives next to it rather than
+inside it.
+
+## The keys
+
+| Key | Does |
+| --- | --- |
+| <kbd>q</kbd> | Clip the selected text as a quote |
+| <kbd>r</kbd> | Drag a box; the region becomes a PNG in your note |
+| <kbd>p</kbd> | Clip the whole page as an image |
+| <kbd>f</kbd> | Find in document · on a video, capture the current frame |
+| <kbd>o</kbd> | Toggle the outline |
+| <kbd>x</kbd> | Transcribe a region (needs the AI feature on) |
+| <kbd>shift</kbd> + any clip key | Make it a **parent** — everything after nests underneath |
+| <kbd>esc</kbd> | Leave whatever mode you are in |
+
+## How clipping works
+
+A clip **materialises**. It becomes a real quote or a real PNG in your vault, not
+a pointer into a file that might move. This is a deliberate choice: in the vault
+this was built for, 174 of 348 PDF page references in Excalidraw drawings were
+already broken because the PDF they named no longer existed anywhere. A pointer
+is not storage.
+
+Quotes are rebuilt from the **geometry** of the text layer rather than from what
+the browser thinks you selected — which is what stops a two-column page handing
+you the figure caption sitting beside the sentence you actually highlighted.
+
+Highlights survive: reopen a document and the marks are still on the page,
+positioned as fractions of it, so they stay put at any zoom or window size.
+
+**Delete a bullet from the note and the highlight goes with it.** The note is the
+source of truth; nothing you removed comes back.
+
+## Nesting and parents
+
+Press <kbd>shift</kbd> with any clip key to make that clip a **parent**. Everything
+you clip afterwards nests underneath it, until you make another one:
+
+```md
+- ![[Sources/_assets/p14-msx2s38l.png]] ^hl-02be
+	- > Two positions are randomly chosen in the alignment. ^hl-02bf
+		- P1 and P2 — this is the bit I keep forgetting.
+	- > The same length gap is inserted at position P2. ^hl-02bg
+```
+
+Parenting is **positional**, not per-page: a parent owns everything from its own
+position until the next parent, so a clip from an earlier page than the parent
+sits above it, under whichever parent actually precedes it.
+
+## The library
+
+The **Reader library** (command palette → *Open the Reader library*, or *…in a tab*
+for the full-width version) is a shelf rather than a file list: it shows how far
+through each document you are and how much has come out of it.
+
+![The Reader library in a tab, showing state counts across the top and rows with titles, positions and progress bars](docs/images/library-tab.png)
+
+- Four counts across the top — **reading**, **unread**, **done**, **all** — click to filter.
+- Opens on *Reading* when anything is in progress, because a dozen live documents
+  buried in two thousand untouched ones is not a useful default.
+- Right-click a row for **Open in Reader**, **Open the note**, and two removals:
+  *Remove from library* (only the `.reader`) or *Delete document and note*.
+  Both confirm first, tell you how much of your own writing is in the note, and
+  move files to trash rather than deleting them.
+
+Three commands reach it from the keyboard: **Search the Reader library** (a fuzzy
+quick-switcher), **Continue reading**, and **Open the next unread document**.
+
+## Sources
+
+### PDFs
+
+Rendered by Reader's own pdf.js viewer, one page at a time with a hard memory
+budget, so a 315-page workbook is not a dead tab. Reading order is reconstructed
+from page geometry, which is what makes selection behave on multi-column pages.
+
+### EPUBs
+
+One spine section at a time, never the whole book. A figure clip takes the
+publisher's own image file at full resolution rather than a screenshot of it.
+
+### Web articles
+
+Saved `.html` opens as a readable document. **Images are not fetched.** Every
+image in a saved article lives on someone else's server, so loading one tells
+that host your IP and the moment you opened the page — which is exactly how a
+tracking pixel works. Each image is a placeholder naming its host; click to load
+them, per document, per session.
+
+### Video
+
+A YouTube transcript document opens as the video above its transcript.
+<kbd>f</kbd> captures the exact frame on screen as a parent; <kbd>q</kbd> quotes
+the transcript underneath it. Timestamps are a handle for jumping around, never
+something written into your note.
+
+![A video open in Reader with the player above and the timestamped transcript below](docs/images/video-transcript.png)
+
+## Leaving Readwise
+
+**Import from a Readwise export** turns the two files Readwise hands you on the
+way out — the CSV and the uploaded-files zip — into ordinary notes you own. No
+token, no API, no live subscription: run it and you can cancel the account.
+
+![The Readwise import dialog, showing the two file pickers and a plan reading '2099 notes, 3443 skipped' before anything is written](docs/images/readwise-import.png)
+
+- Shows you exactly what it would write before it writes anything.
+- Your **feed is excluded by default** — it is usually most of the export, and it
+  is skimmed rather than kept.
+- Safe to re-run: a document whose note already exists is skipped whole, never
+  merged, because by then that note may have your prose in it.
+
+## Excalidraw handoff
+
+Clipped a page of exam questions? **Send clips from this note to Excalidraw**
+opens a gallery of every image clip in the note, and drops the ones you pick into
+a drawing with blank working room underneath each — proportional to the clip, so
+a whole page gets more room than a one-line definition.
+
+## AI transcription (optional)
+
+**Off by default, and it is the only thing in Reader that touches the network.**
+
+Displayed maths is genuinely unrecoverable from a PDF's text layer — <kbd>q</kbd>
+refuses rather than hand you mangled symbols. <kbd>x</kbd> is the answer: drag a
+box around an equation and get `$$…$$` back, or a table as markdown.
+
+The result **always** opens in an editable box before anything is written. It is
+a suggestion you accept, never a silent write.
+
+> **Your API key is stored in plain text** in this vault's `data.json`, which
+> means it syncs wherever your vault syncs and lands in whatever backs it up.
+> Leave the key blank to keep Reader completely offline.
+
+## Settings
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Sources folder | `Sources` | Where notes and `.reader` files go |
+| Assets folder | `Sources/_assets` | Where clipped images land |
+| Clip resolution | 150 DPI | ~80–250 KB a region; lower makes dense slides unreadable when you zoom |
+| Excalidraw working room | 66% | Blank space under each clip, as a share of its own height |
+| Anthropic API key | *(blank)* | Only used by <kbd>x</kbd>; see the warning above |
+
+Features are individually switchable — Reader itself, the reading skin, the
+importers, and AI.
+
+## Limitations
+
+- **Displayed maths cannot be quoted from a PDF.** It is not in the text layer.
+  Use <kbd>r</kbd> for the image, or <kbd>x</kbd> to transcribe it.
+- **Diagram-heavy pages** with no clean column gutter can still mis-select.
+- **Readwise highlights** made *inside* Readwise are behind their v2 API and are
+  not imported; the documents and your reading state are.
+- **Fresh YouTube URLs** cannot have their transcripts fetched — YouTube gates
+  that. Videos already in a Readwise export work offline.
+- **Apple Books** import is desktop-macOS only and needs Full Disk Access.
 
 ## Development
 
 ```bash
 npm install
-npm run dev            # watch build, straight into the vault, Hot Reload picks it up
-npm test               # 215 tests, no browser required
-npm run books:dry-run  # run the Books pipeline on real data, writing nothing
-npm run anchor:bench   # measure re-anchoring accuracy against the real corpus
-npm run slides:dry-run -- <file.pdf|folder>   # slide structure detection, writing nothing
-npm run build          # typecheck + production build into the repo
-npm run install-local  # production build, copied into the vault
+npm test          # 829 tests
+npm run build     # typecheck + bundle
+npm run install-local
 ```
 
-`npm run dev` writes `main.js`, `styles.css`, `manifest.json` and a `.hotreload` marker into
-`$OBSIDIAN_VAULT/.obsidian/plugins/reader/`. Set `OBSIDIAN_VAULT` to override the default
-vault path. Install [Hot Reload](https://github.com/pjeby/hot-reload) for the reload loop —
-it watches `main.js` and `styles.css` in any plugin directory containing `.hotreload` or
-`.git`.
-
-## The one structural rule
-
-**Nothing under `src/core/`, `src/anchor/`, `src/template/`, `src/transport/` or
-`src/sources/*/map.ts` may import from `obsidian`.**
-
-Those layers stay pure so they can be unit-tested in plain Node — which is what makes the
-highlight re-anchoring engine, the riskiest code in the project, testable at all. Only
-`main.ts`, `settings/tab.ts`, `render/`, `review/` and `sources/*/db.ts` touch the Obsidian
-API. `test/architecture.test.ts` enforces this; it is not a convention to remember.
-
-## Performance discipline
-
-Every listener, observer, interval and iframe registers with `src/core/disposables.ts`, and
-`onunload()` drains it. `test/main.test.ts` asserts the registry is empty after unload. This
-is not boilerplate — it is the specific guard against the runaway-JS failures documented in
-`PLAN.md` §6.
-
-## Licence
-
-MIT.
+The codebase keeps a pure core with no `obsidian` import — the capture model,
+note writing, anchoring and rect maths are all testable in plain Node, and an
+architecture test enforces the boundary.
