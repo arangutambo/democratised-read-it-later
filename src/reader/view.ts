@@ -33,6 +33,10 @@ import {
 import { PageWindow } from "./render/virtualiser";
 import { EpubSurface } from "../epub/surface";
 import { WebSurface } from "../web/surface";
+import { VideoSurface } from "../video/surface";
+import { videoIdFrom } from "../video/id";
+import { isTranscript, clockOf, startOf } from "../video/transcript";
+import { captureFrame, currentWebContents, FrameCaptureError } from "../video/frame";
 import { BLOCKED_IMAGE_CLASS } from "../web/sanitise";
 import { PdfSurface, type OutlineEntry } from "./surface/pdf";
 import {
@@ -72,6 +76,9 @@ export class ReaderView extends TextFileView {
 	private surface?: PdfSurface;
 	private epub?: EpubSurface;
 	private web?: WebSurface;
+	private video?: VideoSurface;
+	/** The player element, whose bounds are what a frame capture asks Chromium for. */
+	private playerEl?: HTMLElement;
 	/** Releases the object URLs of sections currently rendered. */
 	private readonly sectionReleases = new Map<number, () => void>();
 	private window?: PageWindow;
@@ -158,6 +165,11 @@ export class ReaderView extends TextFileView {
 		const web = this.web;
 		this.web = undefined;
 		void web?.close();
+
+		const video = this.video;
+		this.video = undefined;
+		this.playerEl = undefined;
+		void video?.close();
 
 		this.doc = undefined;
 		this.scroller?.replaceChildren();
@@ -372,11 +384,40 @@ export class ReaderView extends TextFileView {
 			}
 
 			if (document.source.kind === "html") {
+				const text = new TextDecoder().decode(bytes);
+
+				/*
+				 * A transcript is a video, whatever its extension says.
+				 *
+				 * Half the Readwise export is YouTube, saved as `.html` full of per-phrase
+				 * spans. Detecting it here rather than at import time means the 2,088 documents
+				 * already in the vault become videos without being rewritten.
+				 */
+				if (isTranscript(text)) {
+					const id = videoIdFrom((await this.sourceUrlFor(document.notePath)) ?? "");
+					if (id) {
+						const video = VideoSurface.open(id, text);
+						if (token !== this.loadToken) return;
+
+						this.video = video;
+						this.doc = document;
+						this.doc = await this.reconcileWithNote(document);
+						if (this.file) this.deps.onPageCount?.(this.file.path, video.count);
+
+						this.buildVideo(video);
+						this.buildOutlineFrom(video.outline());
+						this.watchNote();
+						this.setStatus(`${video.count} paragraphs · f frame · q quote`);
+						return;
+					}
+					// No usable URL: fall through and read it as text rather than showing nothing.
+				}
+
 				/*
 				 * Decoded as UTF-8 rather than read as text, because `readSource` also reaches
 				 * files outside the vault and returns bytes for every kind.
 				 */
-				const web = WebSurface.open(new TextDecoder().decode(bytes), this.contentEl.doc);
+				const web = WebSurface.open(text, this.contentEl.doc);
 				if (token !== this.loadToken) return;
 
 				this.web = web;
@@ -748,9 +789,18 @@ export class ReaderView extends TextFileView {
 				event.preventDefault();
 				void this.clipSelection(asParent);
 				break;
+			case "f":
+				// The frame on screen, as a parent. Only means anything for a video.
+				if (this.video) {
+					event.preventDefault();
+					void this.clipFrame();
+				}
+				break;
 			case "r":
 				event.preventDefault();
-				if (this.web) {
+				if (this.video) {
+					new Notice("Reader: press f to capture the frame on screen.");
+				} else if (this.web) {
 					/*
 					 * An article's figures live on someone else's server, so there is no local
 					 * original to take and nothing to crop — see SOURCES.md decision K.
@@ -916,6 +966,7 @@ export class ReaderView extends TextFileView {
 
 		// A section is already a DOM, so the selection is the text — no layer to reconcile, and
 		// the structure comes from real headings and lists rather than being inferred.
+		if (this.video) return this.clipTranscriptSelection(asParent);
 		if (this.epub || this.web) return this.clipSectionSelection(asParent);
 
 		const selection = activeWindow.getSelection();
@@ -972,6 +1023,53 @@ export class ReaderView extends TextFileView {
 	 * The text is exactly what the browser reports, because the markup is the book's own — none
 	 * of the geometry reconstruction a PDF needs, and none of its failure modes.
 	 */
+	/**
+	 * A quote from the transcript.
+	 *
+	 * Never a parent by default. A frame is the heading here, and a quote belongs underneath
+	 * the last one taken — which is what the nesting already does, since parenthood is
+	 * positional. Shift still forces one, for a video you are reading rather than watching.
+	 */
+	private async clipTranscriptSelection(asParent: boolean): Promise<void> {
+		const video = this.video;
+		if (!video) return;
+
+		const selection = activeWindow.getSelection();
+		const text = (selection?.toString() ?? "").replace(/\s+/g, " ").trim();
+
+		if (text === "") {
+			new Notice("Reader: select some transcript first.");
+			return;
+		}
+
+		const paraEl = selection?.anchorNode
+			? ((selection.anchorNode as Node).parentElement?.closest(".reader-transcript-para") as HTMLElement | null)
+			: null;
+		const index = Number(paraEl?.dataset.page ?? "1");
+		const paragraph = video.transcript[Math.max(0, index - 1)];
+
+		const context = video.paragraphText(index);
+		const at = context.indexOf(text);
+
+		await this.commit({
+			kind: "quote",
+			text,
+			isParent: asParent,
+			locator: {
+				surface: { kind: "video-frame", index },
+				// The moment it was said, for a frame taken against this quote later.
+				time: paragraph ? startOf(paragraph, text) : 0,
+				quote: {
+					exact: text,
+					prefix: at >= 0 ? context.slice(Math.max(0, at - 32), at) : "",
+					suffix: at >= 0 ? context.slice(at + text.length, at + text.length + 32) : "",
+				},
+			},
+		});
+
+		selection?.removeAllRanges();
+	}
+
 	/**
 	 * A quote from a section, for the sources whose text is already a DOM.
 	 *
@@ -1112,6 +1210,104 @@ export class ReaderView extends TextFileView {
 		void this.rerenderVisible();
 	}
 
+	/** The video's URL, from the companion note's frontmatter, where the importer left it. */
+	private async sourceUrlFor(notePath: string): Promise<string | undefined> {
+		const note = this.app.vault.getAbstractFileByPath(notePath);
+		if (!(note instanceof TFile)) return undefined;
+
+		const cache = this.app.metadataCache.getFileCache(note)?.frontmatter;
+		if (typeof cache?.url === "string") return cache.url;
+
+		// The cache lags a note written moments ago, so the file is the authority.
+		const match = /^---\n([\s\S]*?)\n---/.exec(await this.app.vault.read(note));
+		return /^url:\s*(.+)$/m.exec(match?.[1] ?? "")?.[1]?.trim();
+	}
+
+	/**
+	 * The video, stacked above its transcript.
+	 *
+	 * Two objects rather than one: the picture comes from the player, the words from the
+	 * transcript. Stacking them keeps both in view at once, which is the whole working
+	 * arrangement — you watch, and you clip the sentence that was just said.
+	 */
+	private buildVideo(video: VideoSurface): void {
+		this.scroller.empty();
+		this.scroller.addClass("is-video");
+
+		const player = this.scroller.createDiv({ cls: "reader-video-player" });
+		this.playerEl = player;
+
+		/*
+		 * `enablejsapi` so the player can be seeked from the transcript, and `origin` because
+		 * YouTube refuses the postMessage API without it.
+		 */
+		const frame = player.createEl("iframe");
+		frame.src =
+			`https://www.youtube-nocookie.com/embed/${video.videoId}` +
+			"?enablejsapi=1&rel=0&modestbranding=1&origin=app://obsidian.md";
+		frame.setAttribute("allow", "accelerometer; encrypted-media; picture-in-picture; fullscreen");
+		frame.setAttribute("allowfullscreen", "true");
+
+		const transcript = this.scroller.createDiv({ cls: "reader-transcript" });
+
+		if (!video.hasTranscript) {
+			transcript.createDiv({
+				cls: "reader-library-empty",
+				text: "No transcript in this document.",
+			});
+			return;
+		}
+
+		for (const paragraph of video.transcript) {
+			const row = transcript.createDiv({ cls: "reader-transcript-para" });
+			row.dataset.page = String(paragraph.index);
+			row.dataset.start = String(paragraph.start);
+
+			// The clock is a handle for jumping, never something written into a note.
+			const time = row.createDiv({ cls: "reader-transcript-time", text: clockOf(paragraph.start) });
+			this.registerDomEvent(time, "click", () => this.seekTo(paragraph.start));
+
+			row.createDiv({ cls: "reader-transcript-text", text: paragraph.text });
+		}
+	}
+
+	/** Move the player, via the iframe API. */
+	private seekTo(seconds: number): void {
+		const frame = this.playerEl?.querySelector("iframe");
+		frame?.contentWindow?.postMessage(
+			JSON.stringify({ event: "command", func: "seekTo", args: [seconds, true] }),
+			"*",
+		);
+	}
+
+	/**
+	 * Capture the frame on screen, as a parent.
+	 *
+	 * The picture is the heading — that was the brief, and it is why this is always a parent:
+	 * everything you quote afterwards belongs to the moment you took it, until you take
+	 * another.
+	 */
+	private async clipFrame(): Promise<void> {
+		const doc = this.doc;
+		const player = this.playerEl;
+		if (!this.video || !doc || !player || !this.file) return;
+
+		try {
+			const png = await captureFrame(player.getBoundingClientRect(), {
+				pixelRatio: window.devicePixelRatio,
+				webContents: () => currentWebContents(),
+			});
+
+			const index = this.doc?.view.surface ?? 1;
+			await this.commitFrame(png, index);
+		} catch (error) {
+			const message =
+				error instanceof FrameCaptureError ? error.message : "The frame could not be captured.";
+			this.deps.log.warn("frame capture failed", error);
+			new Notice(`Reader: ${message}`, 10_000);
+		}
+	}
+
 	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
 		await this.commitImage(pageNumber, rect, asParent);
 	}
@@ -1147,6 +1343,24 @@ export class ReaderView extends TextFileView {
 			this.deps.log.error("could not render the clip", error);
 			new Notice("Reader: that clip could not be rendered — check the console.");
 		}
+	}
+
+	/**
+	 * A captured frame, always as a parent.
+	 *
+	 * `time` goes into the `.reader` and nowhere near the note — the sidecar is where
+	 * provenance lives, and a timestamp in a note was explicitly not wanted. The picture is
+	 * what carries the moment.
+	 */
+	private async commitFrame(png: Uint8Array, index: number): Promise<void> {
+		const time = this.video?.startOfParagraph(index) ?? 0;
+
+		await this.commit({
+			kind: "image",
+			png,
+			isParent: true,
+			locator: { surface: { kind: "video-frame", index }, time },
+		});
 	}
 
 	/**

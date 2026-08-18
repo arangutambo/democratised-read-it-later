@@ -665,3 +665,72 @@
 	display: flex;
 	justify-content: center;
 }
+
+/*
+ * A video, above its transcript.
+ *
+ * Stacked rather than side by side: both stay in view, which is the working arrangement —
+ * you watch, and you clip the sentence that was just said. The player is pinned so it does
+ * not scroll away underneath a long transcript.
+ */
+.reader-scroller.is-video {
+	display: block;
+	padding: 0;
+	align-items: stretch;
+	overflow: hidden;
+	background-color: var(--background-primary);
+}
+
+.reader-video-player {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	max-height: 50%;
+	background-color: #000;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.reader-video-player iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+}
+
+.reader-transcript {
+	height: 50%;
+	overflow-y: auto;
+	padding: var(--size-4-4) var(--size-4-6);
+	max-width: var(--reader-measure, 66ch);
+	margin-inline: auto;
+	user-select: text;
+}
+
+.reader-transcript-para {
+	display: flex;
+	gap: var(--size-4-3);
+	padding: var(--size-2-2) 0;
+	line-height: var(--line-height-normal);
+}
+
+/* A handle for jumping, never something written into a note. */
+.reader-transcript-time {
+	flex: 0 0 3.5em;
+	color: var(--text-accent);
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+	user-select: none;
+	padding-top: 0.15em;
+}
+
+.reader-transcript-time:hover {
+	text-decoration: underline;
+}
+
+.reader-transcript-text {
+	flex: 1;
+	min-width: 0;
+}
