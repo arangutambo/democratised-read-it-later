@@ -2,10 +2,10 @@ import { copyFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 
-const PLUGIN_ID = "reader";
+const PLUGIN_ID = "democratised-read-it-later";
 const VAULT =
 	process.env.OBSIDIAN_VAULT ??
-	path.join(process.env.HOME, "Documents", "🧠 Second Brain");
+	path.join(process.env.HOME, "Documents", "Obsidian Vault");
 
 const dest = path.join(VAULT, ".obsidian", "plugins", PLUGIN_ID);
 

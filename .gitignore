@@ -15,4 +15,14 @@ data.json
 # and never committed. See PLAN.md §5.
 test/private/
 
+# Planning and design notes. They quote a private vault — its size, its
+# broken references, its Zotero library, the coursework in it — and none of
+# that belongs in a public repo. Kept locally.
+READER-V2-PROMPT.md
+INTERROGATION-PROMPT.md
+PLAN.md
+PLAN-V2.md
+DESIGN.md
+SOURCES.md
+
 .DS_Store
