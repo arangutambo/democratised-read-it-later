@@ -47,6 +47,7 @@ export const IMPLEMENTED_FEATURES: ReadonlySet<FeatureKey> = new Set<FeatureKey>
 	"booksImport",
 	"readwiseImport",
 	"zotero",
+	"ai",
 ]);
 
 export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: string }> = {
@@ -82,7 +83,9 @@ export const FEATURE_LABELS: Record<FeatureKey, { name: string; description: str
 	},
 	ai: {
 		name: "AI",
-		description: "Metadata detection, vault auto-linking, and slide synthesis. Every output is a suggestion you accept.",
+		description:
+			"Transcribe a clipped region — an equation to LaTeX, a table to markdown — with x. " +
+			"Needs an Anthropic API key, and the result is always shown to you before anything is written.",
 	},
 };
 
@@ -118,6 +121,15 @@ export interface ReaderSettings {
 	/** Zotero's data directory. Blank uses ~/Zotero. */
 	zoteroDataDir: string;
 	/**
+	 * Anthropic API key, for transcribing a clipped region.
+	 *
+	 * Stored in `data.json`, in plain text, inside the vault — which means it syncs wherever
+	 * the vault syncs and sits in whatever backs the vault up. That is a real exposure, not a
+	 * formality, so it is empty by default and the AI feature is off by default: nothing here
+	 * reaches the network until you have made both choices deliberately.
+	 */
+	anthropicApiKey: string;
+	/**
 	 * Absolute path to the external library holding originals — EPUBs, full PDFs, decks.
 	 * Deliberately outside the vault: this vault is already 2.7 GB.
 	 */
@@ -150,6 +162,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	clipDpi: 150,
 	excalidrawWorkingRoom: 66,
 	zoteroDataDir: "",
+	anthropicApiKey: "",
 	libraryPath: "",
 	progressFile: "Sources/.reader-progress.json",
 	highlightColours: [],

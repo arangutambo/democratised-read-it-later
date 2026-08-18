@@ -851,3 +851,14 @@
 .reader-library-list[aria-busy="true"] {
 	opacity: 0.6;
 }
+
+/* A transcription, before it becomes a note. */
+.reader-transcription-modal { width: min(680px, 90vw); }
+
+.reader-transcription-text {
+	width: 100%;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	resize: vertical;
+	margin-bottom: var(--size-4-2);
+}

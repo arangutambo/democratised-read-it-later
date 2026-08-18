@@ -50,6 +50,10 @@ import {
 export const READER_VIEW_TYPE = "reader-document";
 
 export interface ReaderViewDeps {
+	/** Whether the AI feature is switched on. Read live, so toggling it needs no reload. */
+	aiEnabled?: () => boolean;
+	/** The API key, read at call time so it is never held in the view. */
+	anthropicApiKey?: () => string;
 	clipDpi: number;
 	assetsFolder: string;
 	/** Pages held as canvases at once. Lower on mobile, where memory is the binding limit. */
@@ -814,6 +818,15 @@ export class ReaderView extends TextFileView {
 					this.armRegion(asParent);
 				}
 				break;
+			case "x":
+				// Transcribe a region rather than embed it: an equation becomes LaTeX.
+				if (this.surface && this.deps.aiEnabled?.()) {
+					event.preventDefault();
+					this.transcribeNext = true;
+					this.armRegion(asParent);
+					this.setStatus("Drag a box to transcribe it. Escape to cancel.");
+				}
+				break;
 			case "p":
 				event.preventDefault();
 				void this.clipWholePage(asParent);
@@ -872,6 +885,9 @@ export class ReaderView extends TextFileView {
 		document.addEventListener("keydown", onEscape, true);
 		this.register(cleanup);
 	}
+
+	/** Set while `x` is arming, so the finished region is transcribed rather than embedded. */
+	private transcribeNext = false;
 
 	private armRegion(asParent = false): void {
 		this.pendingParent = asParent;
@@ -1331,7 +1347,57 @@ export class ReaderView extends TextFileView {
 	}
 
 	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
+		if (this.transcribeNext) {
+			this.transcribeNext = false;
+			await this.transcribeRegion(pageNumber, rect, asParent);
+			return;
+		}
+
 		await this.commitImage(pageNumber, rect, asParent);
+	}
+
+	/**
+	 * Transcribe a region instead of embedding it.
+	 *
+	 * The result is shown before anything is written — always. An AI output that lands in a note
+	 * unseen is indistinguishable from a note you wrote, and this plugin exists because a
+	 * generated transcript is not one.
+	 */
+	private async transcribeRegion(
+		pageNumber: number,
+		rect: NormalisedRect,
+		asParent: boolean,
+	): Promise<void> {
+		const surface = this.surface;
+		if (!surface) return;
+
+		const notice = new Notice("Reader: transcribing…", 0);
+
+		try {
+			const png = await surface.renderRegion(pageNumber, rect, this.deps.clipDpi);
+			const { extractFromRegion } = await import("../ai/anthropic");
+			const { TranscriptionModal } = await import("../ai/modal");
+
+			const text = await extractFromRegion(
+				{ png, kind: "auto", context: this.pages.get(pageNumber)?.text },
+				{ apiKey: this.deps.anthropicApiKey?.() ?? "" },
+			);
+
+			notice.hide();
+
+			new TranscriptionModal(this.app, text, (accepted) =>
+				void this.commit({
+					kind: "quote",
+					text: accepted,
+					isParent: asParent,
+					locator: { surface: { kind: "pdf-page", index: pageNumber }, rect },
+				}),
+			).open();
+		} catch (error) {
+			notice.hide();
+			this.deps.log.warn("transcription failed", error);
+			new Notice(`Reader: ${error instanceof Error ? error.message : "transcription failed"}`, 10_000);
+		}
 	}
 
 	private async clipWholePage(asParent = false): Promise<void> {

@@ -128,6 +128,8 @@ export default class ReaderPlugin extends Plugin {
 			(leaf) =>
 				new ReaderView(leaf, {
 					clipDpi: this.settings.clipDpi,
+					aiEnabled: () => this.settings.features.ai,
+					anthropicApiKey: () => this.settings.anthropicApiKey,
 					assetsFolder: this.settings.assetsFolder,
 					// A rendered page is 10–15 MB of canvas. Mobile gets the floor, where memory
 					// is the binding limit and a 315-page workbook is otherwise a dead tab.

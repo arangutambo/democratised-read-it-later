@@ -132,6 +132,27 @@ export class ReaderSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
+			.setName("Anthropic API key")
+			.setDesc(
+				"Only used when you press x to transcribe a clipped region. " +
+					"Stored in plain text in this vault's data.json — so it syncs wherever the vault " +
+					"syncs, and lands in whatever backs the vault up. Leave blank to keep Reader offline.",
+			)
+			.addText((text) => {
+				// A password field: a key on screen in a shared window is a key you have to rotate.
+				text.inputEl.type = "password";
+				text.inputEl.autocomplete = "off";
+
+				return text
+					.setPlaceholder("sk-ant-…")
+					.setValue(this.plugin.settings.anthropicApiKey)
+					.onChange((value) => {
+						this.plugin.settings.anthropicApiKey = value.trim();
+						this.save();
+					});
+			});
+
+		new Setting(el)
 			.setName("Progress file")
 			.setDesc(
 				"Reading progress is kept in this one file rather than in each note's frontmatter, " +

@@ -200,6 +200,7 @@ export function migrateSettings(
 			asNumberInRange(data.excalidrawWorkingRoom, DEFAULT_SETTINGS.excalidrawWorkingRoom, 0, 400),
 		),
 		zoteroDataDir: asString(data.zoteroDataDir, DEFAULT_SETTINGS.zoteroDataDir),
+		anthropicApiKey: asString(data.anthropicApiKey, DEFAULT_SETTINGS.anthropicApiKey),
 		libraryPath: asString(data.libraryPath, DEFAULT_SETTINGS.libraryPath),
 		progressFile: asString(data.progressFile, DEFAULT_SETTINGS.progressFile),
 		highlightColours: coerceColours(data.highlightColours, notes),
