@@ -17,6 +17,7 @@
 import type { TextQuoteSelector } from "../../core/types";
 import type { NormalisedRect } from "../../capture/types";
 import { toNormalised, type Box } from "./region";
+import { runBetween } from "./columns";
 import { linesFromSpans, renderStructured } from "./structure";
 import type { TextSpan } from "../surface/pdf";
 
@@ -90,6 +91,18 @@ export function quoteSelectorFor(
  * wandered outside the page — a drag that started on the page and ended in the note should
  * not silently clip half a document.
  */
+/** Where a range begins or ends, in the page's own normalised coordinates. */
+function pointOf(range: Range, start: boolean, pageRect: DOMRect): { x: number; y: number } {
+	const edge = range.cloneRange();
+	edge.collapse(start);
+
+	const rect = edge.getBoundingClientRect();
+	return {
+		x: (rect.left - pageRect.left) / Math.max(1, pageRect.width),
+		y: (rect.top - pageRect.top) / Math.max(1, pageRect.height),
+	};
+}
+
 export function captureSelection(
 	selection: Selection | null,
 	pageEl: HTMLElement,
@@ -119,6 +132,24 @@ export function captureSelection(
 		const span = spans[index];
 		if (span) covered.push(span);
 	});
+
+	/*
+	 * Cut that down to what a person would call the selection.
+	 *
+	 * `containsNode` is DOM order, and on a two-column page the DOM zigzags: body text and a
+	 * figure caption sit at the same height, so dragging over one sentence swept up fragments
+	 * from all over the page and drew a mark on each. Taking the run between where the drag
+	 * started and where it ended, in reading order, is what the gesture actually meant.
+	 */
+	const between = runBetween(spans, pointOf(range, true, pageRect), pointOf(range, false, pageRect));
+	if (between.length > 0 && between.length < covered.length) {
+		const wanted = new Set(between);
+		const trimmed = covered.filter((span) => wanted.has(span));
+		if (trimmed.length > 0) {
+			covered.length = 0;
+			covered.push(...trimmed);
+		}
+	}
 
 	const structured = covered.length > 0 ? renderStructured(linesFromSpans(covered)) : "";
 	// Fall back to the raw selection when the spans could not be matched — a quote that is

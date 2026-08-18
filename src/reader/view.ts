@@ -177,6 +177,37 @@ export class ReaderView extends TextFileView {
 
 	// ------------------------------------------------------------------------- lifecycle
 
+	/**
+	 * Full page: the document and nothing else.
+	 *
+	 * Both sidebars collapse and the pane takes the window. Reading a textbook beside a file
+	 * tree, a calendar and a budget is the arrangement working against you — everything on
+	 * screen competes for the attention the page needs.
+	 */
+	toggleFullPage(on?: boolean): void {
+		const next = on ?? !this.contentEl.hasClass("is-full-page");
+		this.contentEl.toggleClass("is-full-page", next);
+
+		const workspace = this.app.workspace;
+		if (next) {
+			workspace.leftSplit?.collapse();
+			workspace.rightSplit?.collapse();
+		} else {
+			workspace.leftSplit?.expand();
+			workspace.rightSplit?.expand();
+		}
+
+		this.setStatus(next ? "Full page · esc or shift+f to leave" : this.statusForSurface());
+	}
+
+	/** The status line this document would normally show. */
+	private statusForSurface(): string {
+		if (this.video) return `${this.video.count} paragraphs · f frame · q quote`;
+		if (this.web) return this.articleStatus();
+		if (this.epub) return `${this.epub.count} sections · q quote · r figure · shift = parent`;
+		return `${this.surface?.pageCount ?? 0} pages · q quote · r region · p page · shift = parent · f find · o outline`;
+	}
+
 	protected override async onOpen(): Promise<void> {
 		const root = this.contentEl;
 		root.empty();
@@ -790,6 +821,12 @@ export class ReaderView extends TextFileView {
 				void this.clipSelection(asParent);
 				break;
 			case "f":
+				// Shift+F is the pane, not a capture — it means the same everywhere.
+				if (event.shiftKey) {
+					event.preventDefault();
+					this.toggleFullPage();
+					break;
+				}
 				// The frame on screen, as a parent. Only means anything for a video.
 				if (this.video) {
 					event.preventDefault();
