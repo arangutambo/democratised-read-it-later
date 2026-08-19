@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+**Save a YouTube video by pasting its link**
+- *Save a YouTube video to Reader* fetches the transcript and writes it into your
+  vault as a document you own — searchable, quotable, and yours after the video
+  is taken down. It opens as the video above its transcript, so <kbd>f</kbd>
+  captures the frame and <kbd>q</kbd> quotes the words, exactly as a Readwise
+  video does.
+- Written in the same per-phrase format as the Readwise export, so there is one
+  kind of video document rather than two.
+- Desktop only: the transcript is read from a real YouTube page in a webview, and
+  there is no webview on mobile.
+- Roughly two seconds a video. Timings are millisecond-accurate, which is finer
+  than YouTube's own transcript panel shows.
+
+**Fixed**
+- Saving a page by URL now opens it *in Reader*. It was opening the raw `.html`
+  file, because a document needs its `.reader` sidecar and note to be a document
+  and 0.2.0 never created them. The URL is also recorded in the note's
+  frontmatter now, which is where the reader looks to tell a video from an
+  article.
+
 ## 0.2.0
 
 **Save a page to Reader**

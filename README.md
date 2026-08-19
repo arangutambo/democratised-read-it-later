@@ -161,6 +161,11 @@ them, per document, per session.
 
 ### Video
 
+**Save a video by pasting its link.** *Save a YouTube video to Reader* fetches
+the transcript and writes it into your vault as a document you own — searchable,
+quotable, and still there after the video is not. Desktop only, and about two
+seconds a video.
+
 A YouTube transcript document opens as the video above its transcript.
 <kbd>f</kbd> captures the exact frame on screen as a parent; <kbd>q</kbd> quotes
 the transcript underneath it. Timestamps are a handle for jumping around, never
@@ -224,8 +229,9 @@ importers, and AI.
 - **Diagram-heavy pages** with no clean column gutter can still mis-select.
 - **Readwise highlights** made *inside* Readwise are behind their v2 API and are
   not imported; the documents and your reading state are.
-- **Fresh YouTube URLs** cannot have their transcripts fetched — YouTube gates
-  that. Videos already in a Readwise export work offline.
+- **YouTube transcripts need the desktop app.** They are read from a real
+  YouTube page in a webview, and there is no webview on mobile. Videos already
+  in a Readwise export work everywhere, offline.
 - **Apple Books** import is desktop-macOS only and needs Full Disk Access.
 
 ## Development

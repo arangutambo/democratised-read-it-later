@@ -93,6 +93,18 @@ export default class ReaderPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "save-youtube-video",
+			name: "Save a YouTube video to Reader",
+			checkCallback: (checking) => {
+				// The transcript is read out of a real YouTube page in a webview, and there is
+				// no webview on mobile.
+				if (!Platform.isDesktopApp) return false;
+				if (!checking) void this.saveVideo();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "import-readwise",
 			name: "Import from a Readwise export",
 			callback: () => void this.importReadwise(),
@@ -581,8 +593,58 @@ export default class ReaderPlugin extends Plugin {
 
 		new SaveUrlModal(this.app, {
 			documentsFolder: this.settings.decksFolder,
-			onSaved: (path) => void this.openReaderFile(path),
+			onSaved: (path, url) => void this.openSavedDocument(path, url),
 		}).open();
+	}
+
+	/** Paste a YouTube link; get its transcript as a document you own. */
+	private async saveVideo(): Promise<void> {
+		const { SaveVideoModal } = await import("./video/modal");
+
+		new SaveVideoModal(this.app, {
+			documentsFolder: this.settings.decksFolder,
+			onSaved: (saved, url) => void this.openSavedDocument(saved.path, url),
+		}).open();
+	}
+
+	/**
+	 * Pair a freshly-saved document with a note and open it in Reader.
+	 *
+	 * Opening the saved file directly is not enough, and was the bug in 0.2.0's URL save: an
+	 * `.html` on its own has no `.reader` sidecar and no note, so Obsidian opened the raw file
+	 * instead of the reader. The pair is what makes it a document.
+	 *
+	 * The URL goes into the note's frontmatter because that is where the reader looks for it —
+	 * a video's id is resolved from `url:`, so a transcript without one opens as an article.
+	 */
+	private async openSavedDocument(path: string, url?: string): Promise<void> {
+		const file = this.app.vault.getFileByPath(path);
+		if (!file) return;
+
+		try {
+			const { ensurePair } = await import("./reader/open");
+			const pair = await ensurePair(
+				this.app,
+				{ path: file.path, basename: file.basename, kind: kindOf(file) ?? "html" },
+				this.settings.sourcesFolder,
+			);
+
+			if (url) {
+				const note = this.app.vault.getFileByPath(pair.notePath);
+				// Never overwrite a URL already recorded: the note is the user's, and a second
+				// save of the same page should not rewrite where they said it came from.
+				if (note) {
+					await this.app.fileManager.processFrontMatter(note, (matter: Record<string, unknown>) => {
+						if (typeof matter.url !== "string" || matter.url === "") matter.url = url;
+					});
+				}
+			}
+
+			await this.openReaderFile(pair.readerPath);
+		} catch (error) {
+			this.log.error("could not open the saved document", error);
+			new Notice("Reader: saved, but it could not be opened. Find it in the library.");
+		}
 	}
 
 	private async importReadwise(): Promise<void> {

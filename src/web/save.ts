@@ -16,8 +16,8 @@ import { fetchPage, fileNameFor, SaveUrlError, titleOf } from "./fetch";
 export interface SaveUrlOptions {
 	/** Where the saved page is written. */
 	documentsFolder: string;
-	/** Opens the freshly-saved document in Reader. */
-	onSaved: (path: string) => void;
+	/** Opens the freshly-saved document in Reader, pairing it with the URL it came from. */
+	onSaved: (path: string, url?: string) => void;
 }
 
 async function ensureFolder(app: App, folder: string): Promise<void> {
@@ -122,7 +122,7 @@ export class SaveUrlModal extends Modal {
 				const path = await saveUrl(this.app, this.url, this.options);
 				this.close();
 				new Notice(`Reader: saved ${path}`);
-				this.options.onSaved(path);
+				this.options.onSaved(path, this.url.trim());
 			} catch (error) {
 				this.busy = false;
 				status.setText(
