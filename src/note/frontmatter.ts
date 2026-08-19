@@ -14,6 +14,7 @@
  */
 
 import type { Csl } from "../core/types";
+import { asText } from "../core/text";
 
 export interface PaperFrontmatter {
 	citekey: string;
@@ -52,7 +53,7 @@ function renderCsl(csl: Csl, indent = "  "): string[] {
 
 	const put = (key: string, value: unknown): void => {
 		if (value === undefined || value === null || value === "") return;
-		lines.push(`${indent}${key}: ${scalar(String(value))}`);
+		lines.push(`${indent}${key}: ${scalar(asText(value))}`);
 	};
 
 	put("type", csl.type);

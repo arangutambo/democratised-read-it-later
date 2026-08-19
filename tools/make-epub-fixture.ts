@@ -15,6 +15,7 @@
 import { deflateRawSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { say } from "./report";
 
 interface Member {
 	name: string;
@@ -190,4 +191,4 @@ writeFileSync(
 	]),
 );
 
-console.log(`wrote ${out}`);
+say(`wrote ${out}`);

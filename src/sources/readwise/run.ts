@@ -141,7 +141,7 @@ async function writeOne(
 		try {
 			if (!app.vault.getAbstractFileByPath(documentPath)) {
 				const bytes = await archive.read(write.zipEntry);
-				await app.vault.createBinary(documentPath, bytes.slice().buffer as ArrayBuffer);
+				await app.vault.createBinary(documentPath, bytes.slice().buffer);
 			}
 			summary.documents++;
 		} catch (error) {

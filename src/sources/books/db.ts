@@ -17,6 +17,18 @@
  *    would add ~1.5 MB of WASM for a feature that cannot run on mobile anyway.
  */
 
+/*
+ * Why the Node builtins below are imported statically.
+ *
+ * esbuild turns a *static* import of a builtin into `require()`, which Electron resolves
+ * natively. A *dynamic* `await import("node:fs")` survives as a real ESM import, which the
+ * renderer fetches as a URL — and Obsidian's `app://obsidian.md` origin turns that into a CORS
+ * failure. So the rule's suggested fix is the thing that breaks.
+ *
+ * What keeps this off mobile is the *module* being imported lazily behind a
+ * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
+ */
+
 import { execFile } from "node:child_process";
 import { mkdtemp, copyFile, rm, readdir, access } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -84,19 +96,21 @@ function isPermissionError(error: unknown): boolean {
  * stalled slot is survivable, a permanently frozen Obsidian is not.
  */
 async function withTimeout<T>(work: Promise<T>, operation: string, ms = DEFAULT_TIMEOUT_MS): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
+	// A number, not a Node `Timeout`: this is the browser's timer, and `@types/node`
+	// otherwise wins the inference and disagrees with what is actually returned.
+	let timer: number | undefined;
 	try {
 		return await Promise.race([
 			work,
 			new Promise<never>((_, reject) => {
-				timer = setTimeout(() => reject(new BooksPermissionError(operation)), ms);
+				timer = window.setTimeout(() => reject(new BooksPermissionError(operation)), ms);
 			}),
 		]);
 	} catch (error) {
 		if (isPermissionError(error)) throw new BooksPermissionError(operation);
 		throw error;
 	} finally {
-		if (timer !== undefined) clearTimeout(timer);
+		if (timer !== undefined) window.clearTimeout(timer);
 	}
 }
 

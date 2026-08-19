@@ -3,7 +3,7 @@ import process from "process";
 import path from "path";
 import { existsSync } from "fs";
 import { copyFile, mkdir, readFile, writeFile } from "fs/promises";
-import builtins from "builtin-modules";
+import { builtinModules as builtins } from "module";
 
 const prod = process.argv[2] === "production";
 
@@ -85,7 +85,7 @@ const shared = {
 const js = await esbuild.context({
 	...shared,
 	entryPoints: ["src/main.ts"],
-	// `builtin-modules` lists bare names ("fs"), so the `node:`-prefixed forms must be listed
+	// `builtinModules` lists bare names ("fs"), so the `node:`-prefixed forms must be listed
 	// too or esbuild tries to bundle them. They stay as runtime requires: `sources/books/db.ts`
 	// is imported lazily and only on desktop, so mobile never evaluates them.
 	external: ["obsidian", "electron", ...builtins, ...builtins.map((m) => `node:${m}`)],

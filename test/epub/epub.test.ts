@@ -23,7 +23,7 @@ import {
 import { parseXml } from "../../src/epub/parse-xml";
 import { ZipArchive, ZipError } from "../../src/epub/zip";
 
-const parse: XmlParser = (xml) => parseXml(xml) as unknown as ReturnType<XmlParser>;
+const parse: XmlParser = (xml) => parseXml(xml);
 
 const FIXTURE = path.resolve(process.cwd(), "test/fixtures/sample.epub");
 const REAL_DIR = path.resolve(process.cwd(), "test/private/epub");

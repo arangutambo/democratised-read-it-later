@@ -37,7 +37,7 @@ export interface ZoteroImportSummary {
 	withoutCitekey: number;
 }
 
-const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToUi = (): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, 0));
 
 export async function importFromZotero(
 	app: App,

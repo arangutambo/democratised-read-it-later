@@ -13,7 +13,7 @@ function bounds(o: Partial<DOMRect>): DOMRect {
 		right: o.right ?? left + width,
 		bottom: o.bottom ?? top + height,
 		x: left, y: top, toJSON: () => ({}),
-	} as DOMRect;
+	};
 }
 
 function deps(png = new Uint8Array([1, 2, 3])): CaptureDeps & { asked: unknown[] } {

@@ -755,7 +755,7 @@ export default class ReaderPlugin extends Plugin {
 	/** Fired when data.json is rewritten underneath us — typically Obsidian Sync. */
 	override async onExternalSettingsChange(): Promise<void> {
 		await this.loadSettings(false);
-		if (this.settingTab?.containerEl.isConnected) this.settingTab.display();
+		if (this.settingTab?.containerEl.isConnected) this.settingTab.update();
 		this.log.info("settings reloaded after external change");
 	}
 }

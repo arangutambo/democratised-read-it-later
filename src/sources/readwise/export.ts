@@ -52,7 +52,7 @@ export function parseCsv(text: string): string[][] {
 	let quoted = false;
 
 	// A BOM is common in exports and becomes part of the first column name otherwise.
-	const input = text.replace(/^﻿/, "");
+	const input = text.replace(/^\uFEFF/, "");
 
 	for (let i = 0; i < input.length; i++) {
 		const ch = input[i];

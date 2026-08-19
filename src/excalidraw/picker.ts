@@ -94,7 +94,7 @@ export class ClipPicker extends Modal {
 			img.loading = "lazy";
 		} else {
 			thumb.addClass("is-missing");
-			thumb.setText("missing");
+			thumb.setText("Missing");
 		}
 
 		const check = card.createDiv({ cls: "reader-clip-check" });

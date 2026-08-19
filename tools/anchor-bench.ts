@@ -24,6 +24,7 @@ import { resolveAll } from "../src/anchor/scheduler";
 import type { Highlight } from "../src/core/types";
 import { locateDatabases, readBooks, withCopiedDatabases, assertSqliteAvailable } from "../src/sources/books/db";
 import { buildImports } from "../src/sources/books/map";
+import { say, warn } from "./report";
 
 const override = {
 	annotations: process.env.READER_BOOKS_ANNOTATIONS,
@@ -175,12 +176,12 @@ async function main(): Promise<void> {
 		.filter((d) => d.doc.length > 0);
 
 	const totalHighlights = documents.reduce((n, d) => n + d.highlights.length, 0);
-	console.log(`corpus: ${documents.length} books, ${totalHighlights} highlights\n`);
+	say(`corpus: ${documents.length} books, ${totalHighlights} highlights\n`);
 
-	console.log(
+	say(
 		"scenario           correct  misanchor  orphan   exact  normal   fuzzy  offset   ambig     ms",
 	);
-	console.log("-".repeat(100));
+	say("-".repeat(100));
 
 	let worstMisanchor = 0;
 
@@ -188,7 +189,7 @@ async function main(): Promise<void> {
 		const o = await runScenario(scenario, documents);
 		worstMisanchor = Math.max(worstMisanchor, o.misanchored / Math.max(o.total, 1));
 
-		console.log(
+		say(
 			`${scenario.name.padEnd(18)}${pct(o.correct, o.total)}     ${pct(o.misanchored, o.total)}  ${pct(
 				o.orphaned,
 				o.total,
@@ -200,16 +201,16 @@ async function main(): Promise<void> {
 		);
 	}
 
-	console.log("\n" + "-".repeat(100));
-	for (const scenario of SCENARIOS) console.log(`  ${scenario.name.padEnd(18)} ${scenario.description}`);
+	say("\n" + "-".repeat(100));
+	for (const scenario of SCENARIOS) say(`  ${scenario.name.padEnd(18)} ${scenario.description}`);
 
-	console.log(
+	say(
 		`\nmis-anchoring is the failure that matters: worst case ${(worstMisanchor * 100).toFixed(1)}%.\n` +
 			`an orphan is visible and reviewable; a wrong anchor is silent.`,
 	);
 }
 
 main().catch((error) => {
-	console.error("benchmark failed:", error);
+	warn("benchmark failed:", error);
 	process.exit(1);
 });

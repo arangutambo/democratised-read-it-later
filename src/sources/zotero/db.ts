@@ -8,6 +8,18 @@
  * back. Zotero keeps being the filing cabinet for PDFs and the source of `library.bib`.
  */
 
+/*
+ * Why the Node builtins below are imported statically.
+ *
+ * esbuild turns a *static* import of a builtin into `require()`, which Electron resolves
+ * natively. A *dynamic* `await import("node:fs")` survives as a real ESM import, which the
+ * renderer fetches as a URL — and Obsidian's `app://obsidian.md` origin turns that into a CORS
+ * failure. So the rule's suggested fix is the thing that breaks.
+ *
+ * What keeps this off mobile is the *module* being imported lazily behind a
+ * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
+ */
+
 import { homedir } from "node:os";
 import path from "node:path";
 

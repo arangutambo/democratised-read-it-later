@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { parseExport, type ReaderLocation, type ReadwiseDocument } from "../../../src/sources/readwise/export";
+import { parseExport, type ReadwiseDocument } from "../../../src/sources/readwise/export";
 import { describePlan, planImport } from "../../../src/sources/readwise/import";
 
 const REAL = path.resolve(process.cwd(), "test/private/readwise/export.csv");
@@ -15,7 +15,7 @@ function doc(overrides: Partial<ReadwiseDocument> = {}): ReadwiseDocument {
 		url: "https://example.com",
 		tags: [],
 		progress: 0,
-		location: "new" as ReaderLocation,
+		location: "new",
 		seen: true,
 		...overrides,
 	};

@@ -1,0 +1,86 @@
+# Build the release where its provenance can be proved.
+#
+# Attestations are the reason this exists. A release built on a laptop is a file someone is
+# asked to trust; one built here carries a signed statement that these exact bytes came from
+# this commit in this repository, which anyone can check with `gh attestation verify`.
+#
+# Pushing a tag is the whole trigger. The tag has no `v` prefix, because Obsidian matches the
+# release tag against `manifest.json`'s version exactly.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Check
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Build
+        run: npm run build
+
+      # The tag and the manifest disagreeing is the classic way to ship a release the
+      # community store then refuses to see. Cheaper to fail here.
+      - name: Tag must match manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "Tag $TAG does not match manifest version $MANIFEST" >&2
+            exit 1
+          fi
+
+      - name: Attest the build
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
+            manifest.json
+
+      # The changelog is the one place a release is described, so the notes come from it
+      # rather than from a second file that drifts.
+      - name: Take the notes from the changelog
+        run: |
+          awk -v tag="${GITHUB_REF_NAME}" '
+            $0 ~ "^## " tag "$" { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "No CHANGELOG.md section for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            main.js styles.css manifest.json \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md

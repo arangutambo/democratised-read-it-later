@@ -94,7 +94,7 @@ export function sanitiseSection(doc: Document, options: SanitiseOptions): HTMLEl
 		if (tag === "a") rewriteLink(node as HTMLAnchorElement);
 	}
 
-	return body as HTMLElement;
+	return body;
 }
 
 /** Replace an element with its children, keeping the text. */

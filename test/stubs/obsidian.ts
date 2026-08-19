@@ -241,6 +241,9 @@ export class PluginSettingTab {
 	) {}
 
 	display(): void {}
+
+	/** Since 1.13: re-evaluates the declarative definitions rather than rebuilding the DOM. */
+	update(): void {}
 }
 
 /** Chainable no-op matching the real builder, so tab code can be constructed safely. */

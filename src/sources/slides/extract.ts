@@ -59,7 +59,7 @@ export interface ExtractOptions {
 }
 
 const DEFAULT_CHUNK = 5;
-const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, 0));
 
 function asString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
@@ -102,8 +102,8 @@ export async function extractPdf(
 	try {
 		const document = await task.promise;
 
-		const meta = await document.getMetadata().catch(() => ({}) as { info?: Record<string, unknown> });
-		const info: Record<string, unknown> = meta.info ?? {};
+		const meta = await document.getMetadata().catch(() => null);
+		const info: Record<string, unknown> = meta?.info ?? {};
 		const metadata: PdfMetadata = {
 			title: asString(info.Title),
 			author: asString(info.Author),

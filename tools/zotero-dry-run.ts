@@ -13,19 +13,20 @@ import { buildImports } from "../src/sources/zotero/map";
 import { writeRegion } from "../src/core/managed-region";
 import { DEFAULT_HIGHLIGHTS_TEMPLATE, DEFAULT_NOTE_TEMPLATE, render } from "../src/template/engine";
 import { buildVariables } from "../src/template/variables";
+import { say, warn } from "./report";
 
 async function main(): Promise<void> {
 	const paths = await locateZotero(process.env.READER_ZOTERO_DIR);
-	console.log("library:      ", paths.library);
-	console.log("better bibtex:", paths.betterBibtex ?? "(not installed)", "\n");
+	say("library:      ", paths.library);
+	say("better bibtex:", paths.betterBibtex ?? "(not installed)", "\n");
 
 	const started = Date.now();
 	const data = await readZotero(paths);
-	console.log(
+	say(
 		`read ${data.annotations.length} annotations, ${data.items.length} items, ` +
 			`${data.citekeys.size} Better BibTeX citekeys in ${Date.now() - started}ms`,
 	);
-	for (const warning of data.warnings) console.log("  warning:", warning);
+	for (const warning of data.warnings) say("  warning:", warning);
 
 	const results = buildImports({
 		items: data.items,
@@ -37,23 +38,23 @@ async function main(): Promise<void> {
 	});
 
 	const total = results.reduce((n, r) => n + r.highlights.length, 0);
-	console.log(`\nwould write ${results.length} note(s) covering ${total} highlight(s)\n`);
+	say(`\nwould write ${results.length} note(s) covering ${total} highlight(s)\n`);
 
-	console.log("citekey                              hl  conf  title");
-	console.log("-".repeat(96));
+	say("citekey                              hl  conf  title");
+	say("-".repeat(96));
 	for (const r of results) {
-		console.log(
+		say(
 			`${r.source.citekey.slice(0, 36).padEnd(36)} ${String(r.highlights.length).padStart(3)}  ` +
 				`${r.confidence.toFixed(2)}  ${r.source.title.slice(0, 46)}`,
 		);
-		for (const w of r.warnings) console.log(`${" ".repeat(38)}! ${w}`);
+		for (const w of r.warnings) say(`${" ".repeat(38)}! ${w}`);
 	}
 
 	const all = results.flatMap((r) => r.highlights);
-	console.log("\nanchors:");
-	console.log(`  with page geometry (quad): ${all.filter((h) => h.anchors.quad).length}/${all.length}`);
-	console.log(`  carrying a comment:        ${all.filter((h) => h.note).length}/${all.length}`);
-	console.log(`  attachment resolved:       ${results.filter((r) => r.source.libraryPath).length}/${results.length}`);
+	say("\nanchors:");
+	say(`  with page geometry (quad): ${all.filter((h) => h.anchors.quad).length}/${all.length}`);
+	say(`  carrying a comment:        ${all.filter((h) => h.note).length}/${all.length}`);
+	say(`  attachment resolved:       ${results.filter((r) => r.source.libraryPath).length}/${results.length}`);
 
 	const sample = results.find((r) => r.highlights.length > 0);
 	if (!sample) return;
@@ -62,11 +63,11 @@ async function main(): Promise<void> {
 	const body = render(DEFAULT_HIGHLIGHTS_TEMPLATE, variables, "highlights").trim();
 	const note = writeRegion(render(DEFAULT_NOTE_TEMPLATE, variables, "note"), "highlights", body).text;
 
-	console.log(`\n${"=".repeat(96)}\nsample note — ${sample.source.title}\n${"=".repeat(96)}`);
-	console.log(note);
+	say(`\n${"=".repeat(96)}\nsample note — ${sample.source.title}\n${"=".repeat(96)}`);
+	say(note);
 }
 
 main().catch((error) => {
-	console.error("zotero dry run failed:", error);
+	warn("zotero dry run failed:", error);
 	process.exit(1);
 });

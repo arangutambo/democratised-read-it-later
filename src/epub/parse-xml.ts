@@ -11,6 +11,6 @@
  */
 
 export function parseXml(xml: string): Document {
-	const withoutDeclaration = xml.replace(/^﻿?\s*<\?xml[^>]*\?>\s*/i, "");
+	const withoutDeclaration = xml.replace(/^\uFEFF?\s*<\?xml[^>]*\?>\s*/i, "");
 	return new DOMParser().parseFromString(withoutDeclaration, "text/xml");
 }

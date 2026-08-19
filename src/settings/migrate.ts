@@ -213,7 +213,7 @@ export function migrateSettings(
 		logLevel: asLogLevel(data.logLevel, DEFAULT_SETTINGS.logLevel),
 	};
 
-	const merged = { ...preserved, ...settings } as ReaderSettings;
+	const merged = { ...preserved, ...settings };
 	const changed = JSON.stringify(raw) !== JSON.stringify(merged);
 
 	return { settings: merged, changed, notes };

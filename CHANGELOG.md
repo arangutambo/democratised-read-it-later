@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.5.0
+
+Everything the Obsidian community review raised, and the linter that would have
+caught it in the first place.
+
+**Requires Obsidian 1.13.** The settings tab now uses the declarative API, which
+is what makes each setting findable from the settings search box rather than
+only by scrolling this plugin's tab.
+
+**Fixed**
+- Page aspect ratios are set through `setCssStyles` rather than by assigning to
+  `element.style`.
+- The plugin description no longer says "Obsidian" — redundant inside a
+  directory of Obsidian plugins.
+- The confirm button on a destructive action uses `setDestructive()`, and the
+  settings tab refreshes with `update()`; both replace APIs deprecated in 1.13.
+- A byte-order mark sitting literally inside two regular expressions is written
+  as `\uFEFF`, and the filename control-character class is spelled out instead
+  of pasted in. Both were invisible in a diff.
+- Values from frontmatter, templates and the metadata cache go through one safe
+  stringifier, so an object can no longer reach a note as `[object Object]`.
+- Timers use `window.setTimeout`, which is what a popout window needs.
+- Several untyped reads (`any` from the metadata cache, `JSON.parse` of a
+  cross-origin message, `new Map()` inferring `Map<any, any>`) are narrowed and
+  checked rather than asserted.
+- `builtin-modules` is gone; Node has shipped `module.builtinModules` for years.
+
+**Added**
+- ESLint, with `eslint-plugin-obsidianmd` and type-aware TypeScript rules, run
+  by `npm run lint`. The repo had no linter, which is why the review found what
+  it found; it now reports zero problems.
+- A release workflow that builds on CI and publishes
+  [artifact attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds),
+  so the released `main.js` can be cryptographically traced to this commit. It
+  also refuses to publish when the tag and `manifest.json` disagree.
+
 ## 0.4.0
 
 **Captured frames are just the frame now.** Two things were getting into them.

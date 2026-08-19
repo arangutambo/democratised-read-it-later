@@ -15,6 +15,7 @@
 import nunjucks from "nunjucks";
 
 import type { TemplateVariables } from "./variables";
+import { asText } from "../core/text";
 
 export class TemplateError extends Error {
 	constructor(
@@ -30,15 +31,15 @@ function createEnvironment(): nunjucks.Environment {
 
 	/** Indent every line but the first — for dropping multi-line quotes into a list item. */
 	env.addFilter("indent_rest", (value: unknown, spaces = 2) =>
-		String(value ?? "").replace(/\n/g, "\n" + " ".repeat(Number(spaces))),
+		asText(value).replace(/\n/g, "\n" + " ".repeat(Number(spaces))),
 	);
 
 	/** Collapse a multi-line highlight to a single line, for headings and callout titles. */
-	env.addFilter("oneline", (value: unknown) => String(value ?? "").replace(/\s*\n\s*/g, " ").trim());
+	env.addFilter("oneline", (value: unknown) => asText(value).replace(/\s*\n\s*/g, " ").trim());
 
 	/** Prefix every line with "> " so a highlight renders as a blockquote. */
 	env.addFilter("blockquote", (value: unknown) =>
-		String(value ?? "")
+		asText(value)
 			.split("\n")
 			.map((line) => `> ${line}`)
 			.join("\n"),
@@ -51,7 +52,7 @@ const environment = createEnvironment();
 
 export function render(template: string, variables: TemplateVariables, templateName = "template"): string {
 	try {
-		return environment.renderString(template, variables as unknown as Record<string, unknown>);
+		return environment.renderString(template, variables);
 	} catch (error) {
 		throw new TemplateError(error instanceof Error ? error.message : String(error), templateName);
 	}

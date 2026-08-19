@@ -27,7 +27,7 @@ if (typeof URL.createObjectURL !== "function") {
 
 function sanitise(html: string, resolveImage: (src: string) => string | undefined = () => "blob:x") {
 	const doc = parseXml(`<html xmlns="http://www.w3.org/1999/xhtml"><body>${html}</body></html>`);
-	return sanitiseSection(doc as unknown as Document, { resolveImage }).innerHTML;
+	return sanitiseSection(doc, { resolveImage }).innerHTML;
 }
 
 describe("sanitiseSection", () => {

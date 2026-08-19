@@ -192,7 +192,7 @@ export function parseDocument(raw: string): ParseResult {
 				zoom: Math.min(8, Math.max(0.1, asFiniteNumber(view.zoom, 1))),
 				scroll: Math.min(1, Math.max(0, asFiniteNumber(view.scroll, 0))),
 			},
-		} as ReaderDocument,
+		},
 		warnings,
 	};
 }

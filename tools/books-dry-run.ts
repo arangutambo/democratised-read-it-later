@@ -14,6 +14,7 @@ import { buildImports } from "../src/sources/books/map";
 import { writeRegion } from "../src/core/managed-region";
 import { DEFAULT_HIGHLIGHTS_TEMPLATE, DEFAULT_NOTE_TEMPLATE, render } from "../src/template/engine";
 import { buildVariables } from "../src/template/variables";
+import { say, warn } from "./report";
 
 const SAMPLE_TITLE = process.argv[2];
 
@@ -32,30 +33,30 @@ async function main(): Promise<void> {
 	await assertSqliteAvailable();
 
 	const paths = await locateDatabases({ override });
-	console.log("annotations:", paths.annotations);
-	console.log("library:    ", paths.library, "\n");
+	say("annotations:", paths.annotations);
+	say("library:    ", paths.library, "\n");
 
 	const started = Date.now();
 	const { assets, annotations, warnings } = await withCopiedDatabases(paths, readBooks);
 	const readMs = Date.now() - started;
 
-	console.log(`read ${annotations.length} annotations and ${assets.length} library assets in ${readMs}ms`);
-	for (const warning of warnings) console.log("  schema warning:", warning);
+	say(`read ${annotations.length} annotations and ${assets.length} library assets in ${readMs}ms`);
+	for (const warning of warnings) say("  schema warning:", warning);
 
 	const results = buildImports(assets, annotations);
 	const totalHighlights = results.reduce((n, r) => n + r.highlights.length, 0);
 
-	console.log(`\nbuilt ${results.length} notes covering ${totalHighlights} highlights\n`);
+	say(`\nbuilt ${results.length} notes covering ${totalHighlights} highlights\n`);
 
-	console.log("citekey                        highlights  conf  title");
-	console.log("-".repeat(96));
+	say("citekey                        highlights  conf  title");
+	say("-".repeat(96));
 	for (const r of results) {
-		console.log(
+		say(
 			`${r.source.citekey.padEnd(30)} ${String(r.highlights.length).padStart(10)}  ${r.confidence
 				.toFixed(2)
 				.padStart(4)}  ${r.source.title.slice(0, 44)}`,
 		);
-		for (const w of r.warnings) console.log(`${" ".repeat(32)}! ${w}`);
+		for (const w of r.warnings) say(`${" ".repeat(32)}! ${w}`);
 	}
 
 	// Anchoring quality: what share of highlights got real disambiguating context?
@@ -64,13 +65,13 @@ async function main(): Promise<void> {
 	const withCfi = all.filter((h) => h.anchors.cfi);
 	const withNote = all.filter((h) => h.note);
 
-	console.log("\nanchoring:");
-	console.log(`  prefix/suffix context: ${withContext.length}/${all.length} (${pct(withContext.length, all.length)})`);
-	console.log(`  EPUB CFI:              ${withCfi.length}/${all.length} (${pct(withCfi.length, all.length)})`);
-	console.log(`  carrying a note:       ${withNote.length}/${all.length} (${pct(withNote.length, all.length)})`);
+	say("\nanchoring:");
+	say(`  prefix/suffix context: ${withContext.length}/${all.length} (${pct(withContext.length, all.length)})`);
+	say(`  EPUB CFI:              ${withCfi.length}/${all.length} (${pct(withCfi.length, all.length)})`);
+	say(`  carrying a note:       ${withNote.length}/${all.length} (${pct(withNote.length, all.length)})`);
 
 	const citekeys = results.map((r) => r.source.citekey);
-	console.log(`  citekey collisions:    ${citekeys.length - new Set(citekeys).size}`);
+	say(`  citekey collisions:    ${citekeys.length - new Set(citekeys).size}`);
 
 	const sample = SAMPLE_TITLE
 		? results.find((r) => r.source.title.toLowerCase().includes(SAMPLE_TITLE.toLowerCase()))
@@ -82,8 +83,8 @@ async function main(): Promise<void> {
 	const body = render(DEFAULT_HIGHLIGHTS_TEMPLATE, variables, "highlights").trim();
 	const note = writeRegion(render(DEFAULT_NOTE_TEMPLATE, variables, "note"), "highlights", body).text;
 
-	console.log(`\n${"=".repeat(96)}\nsample note — ${sample.source.title} (first 3 highlights)\n${"=".repeat(96)}`);
-	console.log(note);
+	say(`\n${"=".repeat(96)}\nsample note — ${sample.source.title} (first 3 highlights)\n${"=".repeat(96)}`);
+	say(note);
 }
 
 function pct(n: number, total: number): string {
@@ -91,6 +92,6 @@ function pct(n: number, total: number): string {
 }
 
 main().catch((error) => {
-	console.error("dry run failed:", error);
+	warn("dry run failed:", error);
 	process.exit(1);
 });

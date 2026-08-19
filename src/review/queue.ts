@@ -73,7 +73,7 @@ export function collectQueue(app: App, sourcesFolder: string): QueueSummary {
 			});
 		}
 
-		const orphanCount = frontmatter.readerOrphans;
+		const orphanCount: unknown = frontmatter.readerOrphans;
 		if (typeof orphanCount === "number" && orphanCount > 0) {
 			orphans += orphanCount;
 			entries.push({

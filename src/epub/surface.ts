@@ -58,7 +58,7 @@ export class EpubSurface implements DocumentSurfaces {
 		this.nav = nav;
 	}
 
-	static async open(bytes: Uint8Array, parse: XmlParser = parseXml as XmlParser): Promise<EpubSurface> {
+	static async open(bytes: Uint8Array, parse: XmlParser = parseXml): Promise<EpubSurface> {
 		const zip = ZipArchive.open(bytes);
 
 		const opfPath = findRootfile(await zip.readText("META-INF/container.xml"), parse);
@@ -121,7 +121,7 @@ export class EpubSurface implements DocumentSurfaces {
 	 */
 	async renderSection(index: number): Promise<RenderedSection> {
 		const item = this.pkg.spine[this.clamp(index) - 1];
-		const doc = parseXml(await this.zip.readText(item.path)) as unknown as Document;
+		const doc = parseXml(await this.zip.readText(item.path));
 		const base = dirnameOf(item.path);
 
 		const urls: string[] = [];
@@ -155,7 +155,7 @@ export class EpubSurface implements DocumentSurfaces {
 	/** A section's plain text, for search and for a quote's surrounding context. */
 	async sectionText(index: number): Promise<string> {
 		const item = this.pkg.spine[this.clamp(index) - 1];
-		const doc = parseXml(await this.zip.readText(item.path)) as unknown as Document;
+		const doc = parseXml(await this.zip.readText(item.path));
 		return (doc.body?.textContent ?? "").replace(/\s+/g, " ").trim();
 	}
 

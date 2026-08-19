@@ -607,7 +607,7 @@ export class ReaderView extends TextFileView {
 
 		for (let n = 1; n <= total; n++) {
 			const page = createPageElement(n);
-			page.root.style.aspectRatio = `1 / ${ratio}`;
+			page.root.setCssStyles({ aspectRatio: `1 / ${ratio}` });
 			this.pages.set(n, page);
 			this.scroller.append(page.root);
 			observer.observe(page.root);
@@ -723,7 +723,7 @@ export class ReaderView extends TextFileView {
 
 			page.canvasHost.replaceChildren(...Array.from(element.childNodes));
 			// A section is as tall as its text; a fixed ratio would clip or pad it.
-			page.root.style.aspectRatio = "";
+			page.root.setCssStyles({ aspectRatio: "" });
 			page.root.addClass("is-section");
 			this.drawMarks(pageNumber);
 			return;
@@ -742,7 +742,7 @@ export class ReaderView extends TextFileView {
 
 				page.canvasHost.replaceChildren(...Array.from(element.childNodes));
 				// A section is as tall as its text; a fixed ratio would clip or pad it.
-				page.root.style.aspectRatio = "";
+				page.root.setCssStyles({ aspectRatio: "" });
 				page.root.addClass("is-section");
 				this.drawMarks(pageNumber);
 			} catch (error) {
@@ -989,7 +989,12 @@ export class ReaderView extends TextFileView {
 	private onMouseDown(event: MouseEvent): void {
 		if (this.mode !== "arming-region" || event.button !== 0) return;
 
-		const pageEl = (event.target as HTMLElement).closest(".reader-page") as HTMLElement | null;
+		// Narrowed rather than cast: `event.target` really can be something without `closest`,
+		// and a check that runs beats an assertion that only silences the compiler.
+		const target = event.target;
+		if (!(target instanceof HTMLElement)) return;
+
+		const pageEl = target.closest<HTMLElement>(".reader-page");
 		const pageNumber = Number(pageEl?.dataset.page);
 		if (!pageEl || !Number.isFinite(pageNumber)) return;
 
@@ -1046,7 +1051,7 @@ export class ReaderView extends TextFileView {
 
 		const selection = activeWindow.getSelection();
 		const pageEl = selection?.anchorNode
-			? ((selection.anchorNode as Node).parentElement?.closest(".reader-page") as HTMLElement | null)
+			? ((selection.anchorNode).parentElement?.closest(".reader-page") as HTMLElement | null)
 			: null;
 		const pageNumber = Number(pageEl?.dataset.page);
 
@@ -1118,7 +1123,7 @@ export class ReaderView extends TextFileView {
 		}
 
 		const paraEl = selection?.anchorNode
-			? ((selection.anchorNode as Node).parentElement?.closest(".reader-transcript-para") as HTMLElement | null)
+			? ((selection.anchorNode).parentElement?.closest(".reader-transcript-para") as HTMLElement | null)
 			: null;
 		const index = Number(paraEl?.dataset.page ?? "1");
 		const paragraph = video.transcript[Math.max(0, index - 1)];
@@ -1161,7 +1166,7 @@ export class ReaderView extends TextFileView {
 		}
 
 		const pageEl = selection?.anchorNode
-			? ((selection.anchorNode as Node).parentElement?.closest(".reader-page") as HTMLElement | null)
+			? ((selection.anchorNode).parentElement?.closest(".reader-page") as HTMLElement | null)
 			: null;
 		const index = Number(pageEl?.dataset.page);
 		if (!pageEl || !Number.isFinite(index)) return;
@@ -1220,9 +1225,9 @@ export class ReaderView extends TextFileView {
 		const doc = this.doc;
 		if (!epub || !doc || !this.file) return;
 
-		const img = target.closest("img") as HTMLImageElement | null;
+		const img = target.closest("img");
 		const src = img?.dataset.readerSrc;
-		const pageEl = target.closest(".reader-page") as HTMLElement | null;
+		const pageEl = target.closest<HTMLElement>(".reader-page");
 		const index = Number(pageEl?.dataset.page);
 
 		if (!src || !Number.isFinite(index)) {
@@ -1744,7 +1749,7 @@ export class ReaderView extends TextFileView {
 		const usable = this.outline.filter(
 			(entry): entry is OutlineEntry & { page: number } => typeof entry.page === "number",
 		);
-		return sectionsForPage(usable as Section[], page);
+		return sectionsForPage(usable, page);
 	}
 
 	private async writeAsset(

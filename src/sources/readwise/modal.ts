@@ -142,7 +142,7 @@ export class ReadwiseImportModal extends Modal {
 			const file = input.files?.[0];
 			if (!file) return;
 
-			status.setText("reading…");
+			status.setText("Reading…");
 			void load(file)
 				.then((label) => status.setText(label))
 				.catch((error: unknown) => {

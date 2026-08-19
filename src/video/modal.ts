@@ -82,7 +82,7 @@ export class SaveVideoModal extends Modal {
 						// on every video.
 						partition: "persist:reader-youtube",
 						onProgress: (stage: string) => status.setText(PROGRESS[stage] ?? "Working…"),
-					})) as FetchedTranscript;
+					}));
 				} catch (error) {
 					this.busy = false;
 					status.setText(

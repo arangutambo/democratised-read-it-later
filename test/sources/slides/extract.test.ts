@@ -1,3 +1,7 @@
+/**
+ * @vitest-environment happy-dom
+ */
+
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -97,7 +101,7 @@ describe("input ownership", () => {
 					destroy: async () => {},
 				};
 			},
-		} as unknown as PdfJsLib;
+		};
 	}
 
 	it("never hands pdf.js the caller's ArrayBuffer", async () => {

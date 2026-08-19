@@ -111,12 +111,17 @@ export class PlayerLink {
 	private receive(event: MessageEvent): void {
 		if (event.source !== this.frame.contentWindow) return;
 
-		let payload: { event?: string; info?: Record<string, unknown> };
+		// The message crosses an origin boundary, so its shape is a claim rather than a fact:
+		// parse to `unknown`, check it is an object, and only then read fields off it.
+		let parsed: unknown;
 		try {
-			payload = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+			parsed = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 		} catch {
 			return;
 		}
+
+		if (typeof parsed !== "object" || parsed === null) return;
+		const payload = parsed as { event?: string; info?: Record<string, unknown> };
 
 		const info = payload?.info;
 		if (!info) return;

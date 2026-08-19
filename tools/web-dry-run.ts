@@ -1,9 +1,10 @@
 /** Dry run: the article parser over the real exported corpus. */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { Window } from "happy-dom";
 import { parseArticle, sectionText, outlineOf } from "../src/web/article";
 import { sanitiseArticle, BLOCKED_IMAGE_CLASS } from "../src/web/sanitise";
+import { createDom } from "./dom";
+import { say } from "./report";
 
 /*
  * A fresh Window every so often.
@@ -12,14 +13,13 @@ import { sanitiseArticle, BLOCKED_IMAGE_CLASS } from "../src/web/sanitise";
  * one process exhausts the heap. The plugin has one article open at a time; this is the
  * harness's problem, not the parser's.
  */
-let win = new Window();
+const dom = createDom();
+const parse = dom.parse;
 let sinceRecycle = 0;
-const parse = (html: string): Document =>
-	new (win as any).DOMParser().parseFromString(html, "text/html") as Document;
 const recycle = () => {
 	if (++sinceRecycle < 50) return;
 	sinceRecycle = 0;
-	win = new Window();
+	dom.recycle();
 };
 
 const dir = process.argv[2];
@@ -49,10 +49,10 @@ for (const file of files) {
 	recycle();
 }
 
-console.log(`files              ${files.length}`);
-console.log(`sections           ${sections} (max ${maxSections} in one article, mean ${(sections/files.length).toFixed(1)})`);
-console.log(`title from doc     ${titled}   |  no title in file: ${noTitle}`);
-console.log(`remote imgs blocked ${blocked}`);
-console.log(`articles w/ no text ${empty}`);
-console.log(`text extracted     ${(chars/1e6).toFixed(2)} M chars`);
-console.log(`elapsed            ${Date.now() - started} ms`);
+say(`files              ${files.length}`);
+say(`sections           ${sections} (max ${maxSections} in one article, mean ${(sections/files.length).toFixed(1)})`);
+say(`title from doc     ${titled}   |  no title in file: ${noTitle}`);
+say(`remote imgs blocked ${blocked}`);
+say(`articles w/ no text ${empty}`);
+say(`text extracted     ${(chars/1e6).toFixed(2)} M chars`);
+say(`elapsed            ${Date.now() - started} ms`);

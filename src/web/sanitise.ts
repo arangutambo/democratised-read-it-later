@@ -64,7 +64,7 @@ export function sanitiseArticle(
 	holder.body.appendChild(holder.importNode(body, true));
 
 	const cleaned = sanitiseSection(holder, sanitiseOptions);
-	return doc.importNode(cleaned, true) as HTMLElement;
+	return doc.importNode(cleaned, true);
 }
 
 /**

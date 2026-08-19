@@ -32,7 +32,7 @@ export interface ResolveAllOptions extends ResolveOptions {
 
 const DEFAULT_CHUNK_SIZE = 25;
 
-const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, 0));
 
 export interface ResolveAllResult {
 	resolutions: Map<string, Resolution>;

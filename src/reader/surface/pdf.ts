@@ -94,7 +94,7 @@ export class PdfSurface implements DocumentSurfaces {
 
 	static async open(data: ArrayBuffer | Uint8Array, options: OpenOptions = {}): Promise<PdfSurface> {
 		const pdfjs = options.pdfjs ?? (await obsidianPdfJs());
-		const createCanvas = options.createCanvas ?? (() => document.createElement("canvas"));
+		const createCanvas = options.createCanvas ?? (() => createEl("canvas"));
 
 		// `isEvalSupported: false` keeps pdf.js from compiling font programs with eval, which a
 		// stricter Obsidian content-security policy would refuse anyway.

@@ -112,7 +112,7 @@ export async function sendToExcalidraw(
 			onNewPane: true,
 		});
 	} else {
-		await app.workspace.getLeaf(true).openFile(existing as TFile);
+		await app.workspace.getLeaf(true).openFile(existing);
 	}
 
 	// "active" is the leaf just opened. Without a view attached, elements go nowhere.

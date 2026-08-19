@@ -4,7 +4,7 @@ import { columnOf, detectColumns, readingOrder, runBetween, spanAt } from "../..
 import type { TextSpan } from "../../src/reader/surface/pdf";
 
 function span(text: string, left: number, top: number, width = 0.3, height = 0.02): TextSpan {
-	return { text, left, top, width, height } as TextSpan;
+	return { text, left, top, width, height };
 }
 
 /**

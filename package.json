@@ -1,11 +1,13 @@
 {
 	"name": "democratised-read-it-later",
-	"version": "0.3.0",
+	"version": "0.5.0",
 	"description": "Read-it-later, reader mode, highlighting and research capture for Obsidian.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
 		"install-local": "node esbuild.config.mjs production && node scripts/install-local.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
@@ -21,13 +23,16 @@
 	"keywords": [],
 	"license": "MIT",
 	"devDependencies": {
+		"@eslint/js": "^10.0.1",
 		"@types/node": "^20.12.7",
-		"builtin-modules": "^3.3.0",
 		"esbuild": "^0.25.12",
+		"eslint": "^10.8.1",
+		"eslint-plugin-obsidianmd": "^0.4.1",
 		"happy-dom": "^20.11.2",
 		"obsidian": "^1.5.7",
 		"pdfjs-dist": "^6.2.108",
 		"typescript": "^5.4.5",
+		"typescript-eslint": "^8.67.0",
 		"vitest": "^3.2.7"
 	},
 	"dependencies": {

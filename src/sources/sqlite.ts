@@ -19,6 +19,18 @@
  * that cannot run on mobile anyway.
  */
 
+/*
+ * Why the Node builtins below are imported statically.
+ *
+ * esbuild turns a *static* import of a builtin into `require()`, which Electron resolves
+ * natively. A *dynamic* `await import("node:fs")` survives as a real ESM import, which the
+ * renderer fetches as a URL — and Obsidian's `app://obsidian.md` origin turns that into a CORS
+ * failure. So the rule's suggested fix is the thing that breaks.
+ *
+ * What keeps this off mobile is the *module* being imported lazily behind a
+ * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
+ */
+
 import { execFile } from "node:child_process";
 import { access, copyFile, mkdtemp, rm } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -61,19 +73,21 @@ export async function withTimeout<T>(
 	onDenied: (operation: string) => SqlitePermissionError = (op) =>
 		new SqlitePermissionError(`The system blocked reading ${op}.`),
 ): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
+	// A number, not a Node `Timeout`: this is the browser's timer, and `@types/node`
+	// otherwise wins the inference and disagrees with what is actually returned.
+	let timer: number | undefined;
 	try {
 		return await Promise.race([
 			work,
 			new Promise<never>((_, reject) => {
-				timer = setTimeout(() => reject(onDenied(operation)), ms);
+				timer = window.setTimeout(() => reject(onDenied(operation)), ms);
 			}),
 		]);
 	} catch (error) {
 		if (isPermissionError(error)) throw onDenied(operation);
 		throw error;
 	} finally {
-		if (timer !== undefined) clearTimeout(timer);
+		if (timer !== undefined) window.clearTimeout(timer);
 	}
 }
 

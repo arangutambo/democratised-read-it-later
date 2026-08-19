@@ -61,7 +61,8 @@ export function normalise(input: string): Normalised {
 
 		inWhitespace = false;
 		const folded = foldChar(char);
-		for (const _ of folded) map.push(i);
+		// One entry per code point of the folded text, so an index into `text` maps back.
+		map.push(...Array.from(folded, () => i));
 		text += folded;
 	}
 

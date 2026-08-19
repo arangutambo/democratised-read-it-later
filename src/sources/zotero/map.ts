@@ -219,7 +219,7 @@ export function buildImports(input: ZoteroBuildInput): ImportResult[] {
 	const fieldsByItem = new Map<number, Map<string, string>>();
 	for (const row of fields) {
 		let bucket = fieldsByItem.get(row.itemID);
-		if (!bucket) fieldsByItem.set(row.itemID, (bucket = new Map()));
+		if (!bucket) fieldsByItem.set(row.itemID, (bucket = new Map<string, string>()));
 		bucket.set(row.fieldName, row.value);
 	}
 

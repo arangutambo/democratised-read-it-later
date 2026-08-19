@@ -29,17 +29,17 @@ export interface PageElement {
 }
 
 export function createPageElement(pageNumber: number): PageElement {
-	const root = document.createElement("div");
+	const root = createDiv();
 	root.className = "reader-page";
 	root.dataset.page = String(pageNumber);
 
-	const canvasHost = document.createElement("div");
+	const canvasHost = createDiv();
 	canvasHost.className = "reader-page-canvas";
 
-	const overlay = document.createElement("div");
+	const overlay = createDiv();
 	overlay.className = "reader-page-overlay";
 
-	const textLayer = document.createElement("div");
+	const textLayer = createDiv();
 	textLayer.className = "reader-page-text";
 
 	root.append(canvasHost, overlay, textLayer);
@@ -56,7 +56,7 @@ export function createPageElement(pageNumber: number): PageElement {
  * it happens to be, and a re-render only sharpens it.
  */
 export function setCanvas(page: PageElement, canvas: HTMLCanvasElement, cssWidth: number, cssHeight: number): void {
-	if (cssWidth > 0 && cssHeight > 0) page.root.style.aspectRatio = `${cssWidth} / ${cssHeight}`;
+	if (cssWidth > 0 && cssHeight > 0) page.root.setCssStyles({ aspectRatio: `${cssWidth} / ${cssHeight}` });
 	page.canvasHost.replaceChildren(canvas);
 }
 
@@ -106,12 +106,12 @@ export function setTextLayer(
 	 * `toString()` returns, and the spans a capture walks are all the same thing again.
 	 */
 	const spans = readingOrder(unordered);
-	const fragment = document.createDocumentFragment();
+	const fragment = createFragment();
 	const parts: string[] = [];
 	const created: { el: HTMLElement; target: number }[] = [];
 
 	for (const span of spans) {
-		const el = document.createElement("span");
+		const el = createSpan();
 		el.textContent = span.text;
 		el.style.left = `${span.left * 100}%`;
 		el.style.top = `${span.top * 100}%`;
@@ -136,7 +136,7 @@ export function setTextLayer(
 		 * already end in a space are left alone; `tidyQuote` collapses any doubling anyway.
 		 */
 		if (!/\s$/.test(span.text)) {
-			const gap = document.createElement("span");
+			const gap = createSpan();
 			gap.className = "reader-space";
 			gap.textContent = " ";
 			el.append(gap);
@@ -171,11 +171,11 @@ export function setTextLayer(
 
 /** Draw the marks for this page. Replaces whatever was there. */
 export function setMarks(page: PageElement, rects: readonly NormalisedRect[]): void {
-	const fragment = document.createDocumentFragment();
+	const fragment = createFragment();
 
 	for (const rect of rects) {
 		const box = toScreen(rect, 100, 100);
-		const el = document.createElement("div");
+		const el = createDiv();
 		el.className = "reader-mark";
 		// Percentages, so marks stay put across a re-render at a different zoom.
 		el.style.left = `${box.x}%`;

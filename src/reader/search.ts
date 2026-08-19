@@ -102,7 +102,7 @@ export async function searchDocument(
 	for (let page = 1; page <= pageCount; page++) {
 		if (options.signal?.aborted) return hits;
 
-		let text = "";
+		let text: string;
 		try {
 			text = await textOf(page);
 		} catch {

@@ -197,7 +197,7 @@ describe("migrateSettings", () => {
 				// Settings are written back when `changed`, so a migration that never settles
 				// would rewrite data.json on every load and churn Obsidian Sync forever.
 				const once = migrateSettings(v1).settings;
-				const twice = migrateSettings(once as unknown as Record<string, unknown>);
+				const twice = migrateSettings(once);
 
 				expect(twice.settings).toEqual(once);
 				expect(twice.changed).toBe(false);

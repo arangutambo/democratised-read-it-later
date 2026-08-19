@@ -47,8 +47,10 @@ function existingCitekeys(app: App, sourcesFolder: string): Map<string, string> 
 		if (prefix !== "" && !file.path.startsWith(`${prefix}/`)) continue;
 
 		const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-		const sourceId = frontmatter?.readerSourceId;
-		const citekey = frontmatter?.citekey;
+		// `frontmatter` is `any` from the metadata cache; naming these `unknown` makes the
+		// checks below narrow a genuinely unknown value rather than dress up an unchecked one.
+		const sourceId: unknown = frontmatter?.readerSourceId;
+		const citekey: unknown = frontmatter?.citekey;
 
 		if (typeof sourceId === "string" && sourceId !== "" && typeof citekey === "string" && citekey !== "") {
 			found.set(sourceId, citekey);
@@ -59,7 +61,7 @@ function existingCitekeys(app: App, sourcesFolder: string): Map<string, string> 
 }
 
 /** Lets the UI paint between notes; writing 23 files without this blocks the main thread. */
-const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const yieldToUi = (): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, 0));
 
 export async function importFromAppleBooks(
 	app: App,

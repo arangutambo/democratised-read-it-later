@@ -100,19 +100,19 @@ describe("ReaderPlugin lifecycle", () => {
 		expect(saved).toHaveLength(0);
 	});
 
-	it("redisplays the settings tab on external change only when it is open", async () => {
+	it("refreshes the settings tab on external change only when it is open", async () => {
 		const { plugin, stub } = makePlugin(structuredClone(DEFAULT_SETTINGS));
 		await plugin.onload();
 
 		const tab = stub.settingTabs[0];
-		const display = vi.spyOn(tab, "display").mockImplementation(() => {});
+		const update = vi.spyOn(tab, "update").mockImplementation(() => {});
 
 		await plugin.onExternalSettingsChange();
-		expect(display).not.toHaveBeenCalled();
+		expect(update).not.toHaveBeenCalled();
 
 		(tab.containerEl as unknown as { isConnected: boolean }).isConnected = true;
 		await plugin.onExternalSettingsChange();
-		expect(display).toHaveBeenCalledOnce();
+		expect(update).toHaveBeenCalledOnce();
 	});
 
 	it("persists settings through saveSettings", async () => {
