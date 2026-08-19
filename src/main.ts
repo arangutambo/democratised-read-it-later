@@ -121,6 +121,24 @@ export default class ReaderPlugin extends Plugin {
 			},
 		});
 
+		/*
+		 * The timestamps in a note are links back into the open video.
+		 *
+		 * `obsidian://` is the only scheme a markdown note can hold that Obsidian will route to
+		 * a plugin, so this is what turns a stamp from a label into a citation you can follow.
+		 * It seeks whichever Reader view is already open — it does not open a document, because
+		 * the note has no idea which video the click came from and guessing would jump you
+		 * somewhere you were not.
+		 */
+		this.registerObsidianProtocolHandler("reader-seek", (params) => {
+			const seconds = Number(params.t);
+			if (!Number.isFinite(seconds)) return;
+
+			for (const leaf of this.app.workspace.getLeavesOfType(READER_VIEW_TYPE)) {
+				(leaf.view as ReaderView).seekVideo(seconds);
+			}
+		});
+
 		this.log.info(`loaded v${this.manifest.version}`);
 	}
 

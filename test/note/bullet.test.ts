@@ -588,3 +588,52 @@ describe("sections become headings", () => {
 		expect(out.indexOf("earlier")).toBeLessThan(out.indexOf("one"));
 	});
 });
+
+describe("video timestamps", () => {
+	const videoClip = (over: Record<string, unknown> = {}) =>
+		({
+			id: "01k9",
+			documentId: "d",
+			kind: "quote",
+			text: "the thing that was said",
+			locator: { surface: { kind: "video-frame", index: 3 }, time: 62 },
+			...over,
+		}) as never;
+
+	it("puts a clickable stamp at the head of a video quote", () => {
+		/*
+		 * A link, not a label. The original brief said no timestamps — a bare number is noise
+		 * beside a picture of the moment. What changed is that it became a handle: it reopens
+		 * the video at the second the quote was said.
+		 */
+		const out = renderBullet(videoClip());
+
+		expect(out).toContain("[1:02](obsidian://reader-seek?t=62)");
+		expect(out).toContain("> the thing that was said");
+	});
+
+	it("stamps a captured frame too", () => {
+		const out = renderBullet(videoClip({ kind: "image", assetPath: "a/f.png", text: undefined }));
+		expect(out).toContain("[1:02](obsidian://reader-seek?t=62)");
+	});
+
+	it("leaves a PDF clip unstamped", () => {
+		// A page has no moment; a stamp there would be a number that means nothing.
+		const out = renderBullet(videoClip({ locator: { surface: { kind: "pdf-page", index: 3 }, time: 62 } }));
+		expect(out).not.toContain("obsidian://reader-seek");
+	});
+
+	it("leaves a video clip with no recorded time unstamped", () => {
+		const out = renderBullet(videoClip({ locator: { surface: { kind: "video-frame", index: 3 } } }));
+		expect(out).not.toContain("obsidian://reader-seek");
+	});
+
+	it("shows hours only when there are hours", () => {
+		expect(renderBullet(videoClip({ locator: { surface: { kind: "video-frame", index: 1 }, time: 3725 } })))
+			.toContain("[1:02:05]");
+	});
+
+	it("keeps the block id where Obsidian looks for it", () => {
+		expect(renderBullet(videoClip())).toContain("^hl-01k9");
+	});
+});

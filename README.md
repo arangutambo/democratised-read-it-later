@@ -71,6 +71,10 @@ inside it.
 | <kbd>r</kbd> | Drag a box; the region becomes a PNG in your note |
 | <kbd>p</kbd> | Clip the whole page as an image |
 | <kbd>f</kbd> | Find in document · on a video, capture the current frame |
+| <kbd>a</kbd> | *(video)* Clip the whole paragraph you are on |
+| <kbd>j</kbd> <kbd>k</kbd> / <kbd>↓</kbd> <kbd>↑</kbd> | *(video)* Move a paragraph, taking the video with you |
+| <kbd>space</kbd> | *(video)* Play or pause |
+| <kbd>g</kbd> | *(video)* Resume following after you have read ahead |
 | <kbd>o</kbd> | Toggle the outline |
 | <kbd>x</kbd> | Transcribe a region (needs the AI feature on) |
 | <kbd>shift</kbd> + any clip key | Make it a **parent** — everything after nests underneath |
@@ -166,10 +170,26 @@ the transcript and writes it into your vault as a document you own — searchabl
 quotable, and still there after the video is not. Desktop only, and about two
 seconds a video.
 
-A YouTube transcript document opens as the video above its transcript.
-<kbd>f</kbd> captures the exact frame on screen as a parent; <kbd>q</kbd> quotes
-the transcript underneath it. Timestamps are a handle for jumping around, never
-something written into your note.
+A YouTube transcript document opens as the video above its transcript, and the
+transcript **follows the video as it plays** — the paragraph being spoken is
+marked, and the pane scrolls to keep it in view. Scroll by hand and following
+stops, because being dragged back mid-sentence is worse than losing your place;
+<kbd>g</kbd> resumes it.
+
+Reader supplies the transport rather than YouTube: play/pause, a clock, and a
+**speed control**, which is the one a recorded lecture actually needs. The embed
+is asked for no controls of its own, and that is not cosmetic — a captured frame
+is a photograph of what was drawn, so YouTube's control bar, caption overlay and
+end-screen suggestions were all landing inside the pictures.
+
+<kbd>f</kbd> captures the exact frame on screen as a parent, stamped with the
+player's own clock. <kbd>q</kbd> quotes a selection and <kbd>a</kbd> takes the
+whole paragraph — speech has no sentence breaks worth aiming at, and the whole
+paragraph is usually the unit you wanted.
+
+Every video clip carries the second it came from, as a link. Clicking `1:02` in
+your note seeks the open video to that moment — which is the difference between
+a reference and a citation you can follow.
 
 ![A video open in Reader with the player above and the timestamped transcript below](docs/images/video-transcript.png)
 

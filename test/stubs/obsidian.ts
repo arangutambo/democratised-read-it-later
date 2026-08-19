@@ -173,6 +173,21 @@ export class Plugin {
 		this.settingTabs.push(tab);
 	}
 
+	/**
+	 * The `obsidian://` route back into a plugin.
+	 *
+	 * Records handlers so a test can fire one, which is the only way to exercise a timestamp
+	 * link without a running app.
+	 */
+	protocolHandlers = new Map<string, (params: Record<string, string>) => unknown>();
+
+	registerObsidianProtocolHandler(
+		action: string,
+		handler: (params: Record<string, string>) => unknown,
+	): void {
+		this.protocolHandlers.set(action, handler);
+	}
+
 	addCommand(command: Command): Command {
 		this.commands.push(command);
 		return command;

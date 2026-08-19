@@ -870,3 +870,65 @@
 	padding: var(--size-2-2) var(--size-2-3);
 	margin-bottom: var(--size-4-2);
 }
+
+/*
+ * Reader's own transport bar.
+ *
+ * The embed is asked for no controls of its own, because `capturePage` photographs whatever is
+ * drawn and YouTube's chrome kept landing inside captured frames. Owning the bar also puts the
+ * control a lecture actually needs — speed — where you can reach it.
+ */
+.reader-video-controls {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-2-2) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+}
+
+.reader-video-play {
+	min-width: 5em;
+	min-height: 32px;
+}
+
+.reader-video-clock {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+.reader-video-rate {
+	min-height: 32px;
+}
+
+.reader-video-follow {
+	margin-left: auto;
+	min-height: 32px;
+	font-size: var(--font-ui-smaller);
+}
+
+/* Reading ahead: say so, rather than silently not following. */
+.reader-video-follow.is-off {
+	opacity: 0.55;
+	text-decoration: line-through;
+}
+
+/*
+ * The paragraph being spoken.
+ *
+ * A left rule rather than a filled background: the transcript is already a wall of text, and
+ * something you can find without reading is worth more than something that shouts.
+ */
+.reader-transcript-para.is-current {
+	border-left: 2px solid var(--interactive-accent);
+	margin-left: -2px;
+	background-color: var(--background-modifier-hover);
+	border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
+
+.reader-transcript-para.is-current .reader-transcript-time {
+	color: var(--interactive-accent);
+	font-weight: var(--font-medium);
+}

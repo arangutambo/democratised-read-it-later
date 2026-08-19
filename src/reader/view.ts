@@ -37,6 +37,7 @@ import { VideoSurface } from "../video/surface";
 import { videoIdFrom } from "../video/id";
 import { isTranscript, clockOf, startOf } from "../video/transcript";
 import { captureFrame, currentWebContents, FrameCaptureError } from "../video/frame";
+import { embedUrl, paragraphAt, PlayerLink, RATES, type PlayerState } from "../video/player";
 import { BLOCKED_IMAGE_CLASS } from "../web/sanitise";
 import { PdfSurface, type OutlineEntry } from "./surface/pdf";
 import {
@@ -169,6 +170,11 @@ export class ReaderView extends TextFileView {
 		const web = this.web;
 		this.web = undefined;
 		void web?.close();
+
+		this.link?.stop();
+		this.link = undefined;
+		this.paraRows = [];
+		this.paraStarts = [];
 
 		const video = this.video;
 		this.video = undefined;
@@ -410,9 +416,17 @@ export class ReaderView extends TextFileView {
 						if (this.file) this.deps.onPageCount?.(this.file.path, video.count);
 
 						this.buildVideo(video);
-						this.buildOutlineFrom(video.outline());
+						/*
+						 * No outline for a video.
+						 *
+						 * It was every fourth paragraph, truncated — a column of half-sentences
+						 * that told you nothing a transcript two inches to the right did not.
+						 * The transcript *is* the outline here, and it is now the thing that
+						 * follows the video.
+						 */
+						this.buildOutlineFrom([]);
 						this.watchNote();
-						this.setStatus(`${video.count} paragraphs · f frame · q quote`);
+						this.setStatus(this.videoStatus());
 						return;
 					}
 					// No usable URL: fall through and read it as text rather than showing nothing.
@@ -794,6 +808,42 @@ export class ReaderView extends TextFileView {
 				event.preventDefault();
 				void this.clipSelection(asParent);
 				break;
+			case "j":
+			case "arrowdown":
+				if (this.video) {
+					event.preventDefault();
+					this.stepPara(1);
+				}
+				break;
+			case "k":
+			case "arrowup":
+				if (this.video) {
+					event.preventDefault();
+					this.stepPara(-1);
+				}
+				break;
+			case "g":
+				// Back to following the video after you have read ahead.
+				if (this.video) {
+					event.preventDefault();
+					this.followPlayback = true;
+					this.scrollToPara(this.focusedPara);
+					this.setStatus(this.videoStatus());
+				}
+				break;
+			case " ":
+				if (this.video) {
+					event.preventDefault();
+					this.link?.toggle();
+				}
+				break;
+			case "a":
+				// The whole paragraph, without selecting it by hand.
+				if (this.video) {
+					event.preventDefault();
+					void this.clipWholeParagraph(asParent);
+				}
+				break;
 			case "f":
 				event.preventDefault();
 				// The frame on screen, as a parent — but only a video has a frame. Everywhere
@@ -886,6 +936,16 @@ export class ReaderView extends TextFileView {
 
 	/** Set while `x` is arming, so the finished region is transcribed rather than embedded. */
 	private transcribeNext = false;
+
+	/** Live link to the embedded player: the time, the state, and the commands. */
+	private link?: PlayerLink;
+	/** Paragraph rows, by index, so follow-along can move a class without a query. */
+	private paraRows: HTMLElement[] = [];
+	private paraStarts: number[] = [];
+	/** The paragraph currently spoken, or the one you last moved to while paused. */
+	private focusedPara = 0;
+	/** Off while you are reading ahead; back on when the video is scrubbed or played. */
+	private followPlayback = true;
 
 	private armRegion(asParent = false): void {
 		this.pendingParent = asParent;
@@ -1249,71 +1309,185 @@ export class ReaderView extends TextFileView {
 		this.scroller.empty();
 		this.scroller.addClass("is-video");
 
-		/*
-		 * A stage, then the player inside it.
-		 *
-		 * The stage owns the height — a fixed share of the pane — and the player takes 16:9
-		 * within it. Sizing the player directly meant `width: 100%` won, so on a wide pane the
-		 * video grew until it crowded the transcript out. This way it is as large as fits and
-		 * no larger, centred, and the stage's black absorbs whatever is left over.
-		 */
 		const stage = this.scroller.createDiv({ cls: "reader-video-stage" });
 		const player = stage.createDiv({ cls: "reader-video-player" });
 		this.playerEl = player;
 
-		/*
-		 * `enablejsapi` so the player can be seeked from the transcript, and `origin` because
-		 * YouTube refuses the postMessage API without it.
-		 */
 		const frame = player.createEl("iframe");
-		frame.src =
-			`https://www.youtube-nocookie.com/embed/${video.videoId}` +
-			"?enablejsapi=1&rel=0&modestbranding=1&origin=app://obsidian.md";
+		frame.src = embedUrl(video.videoId);
 		frame.setAttribute("allow", "accelerometer; encrypted-media; picture-in-picture; fullscreen");
 		frame.setAttribute("allowfullscreen", "true");
+
+		const bar = this.scroller.createDiv({ cls: "reader-video-controls" });
+		this.buildControls(bar);
 
 		const transcript = this.scroller.createDiv({ cls: "reader-transcript" });
 
 		if (!video.hasTranscript) {
-			transcript.createDiv({
-				cls: "reader-library-empty",
-				text: "No transcript in this document.",
-			});
+			transcript.createDiv({ cls: "reader-library-empty", text: "No transcript in this document." });
 			return;
 		}
 
 		const body = transcript.createDiv({ cls: "reader-transcript-body" });
+		this.paraRows = [];
+		this.paraStarts = [];
 
 		for (const paragraph of video.transcript) {
 			const row = body.createDiv({ cls: "reader-transcript-para" });
 			row.dataset.page = String(paragraph.index);
 			row.dataset.start = String(paragraph.start);
 
-			// The clock is a handle for jumping, never something written into a note.
 			const time = row.createDiv({ cls: "reader-transcript-time", text: clockOf(paragraph.start) });
 			time.setAttribute("role", "button");
 			time.setAttribute("tabindex", "0");
 			time.setAttribute("aria-label", `Play from ${clockOf(paragraph.start)}`);
 
-			this.registerDomEvent(time, "click", () => this.seekTo(paragraph.start));
+			const jump = (): void => {
+				this.followPlayback = true;
+				this.seekTo(paragraph.start);
+			};
+
+			this.registerDomEvent(time, "click", jump);
 			this.registerDomEvent(time, "keydown", (event) => {
 				if (event.key !== "Enter" && event.key !== " ") return;
 				event.preventDefault();
 				event.stopPropagation();
-				this.seekTo(paragraph.start);
+				jump();
 			});
 
 			row.createDiv({ cls: "reader-transcript-text", text: paragraph.text });
+
+			this.paraRows.push(row);
+			this.paraStarts.push(paragraph.start);
+		}
+
+		/*
+		 * Scrolling by hand means you are reading ahead, so following stops until you seek or
+		 * press `g`. Nothing is more annoying than a pane that drags you back mid-sentence.
+		 */
+		this.registerDomEvent(transcript, "wheel", () => {
+			this.followPlayback = false;
+			this.setStatus(this.videoStatus());
+		});
+
+		this.link = new PlayerLink(frame, (state) => this.onPlayerTick(state));
+		this.link.start();
+	}
+
+	/**
+	 * Reader's own controls.
+	 *
+	 * The embed is asked for none of its own, because YouTube's chrome was ending up inside
+	 * captured frames. Owning them means the bar can carry the thing a lecture actually needs,
+	 * which is speed.
+	 */
+	private buildControls(bar: HTMLElement): void {
+		const play = bar.createEl("button", { cls: "reader-video-play", text: "Play" });
+		play.setAttribute("aria-label", "Play or pause");
+		this.registerDomEvent(play, "click", () => {
+			this.followPlayback = true;
+			this.link?.toggle();
+		});
+
+		const clock = bar.createDiv({ cls: "reader-video-clock", text: "0:00" });
+
+		const rate = bar.createEl("select", { cls: "reader-video-rate" });
+		rate.setAttribute("aria-label", "Playback speed");
+		for (const value of RATES) {
+			rate.createEl("option", { value: String(value), text: `${value}×` });
+		}
+		rate.value = "1";
+		this.registerDomEvent(rate, "change", () => this.link?.setRate(Number(rate.value)));
+
+		const follow = bar.createEl("button", { cls: "reader-video-follow", text: "Following" });
+		follow.setAttribute("aria-label", "Follow the video while it plays");
+		this.registerDomEvent(follow, "click", () => {
+			this.followPlayback = !this.followPlayback;
+			if (this.followPlayback) this.scrollToPara(this.focusedPara);
+			this.setStatus(this.videoStatus());
+		});
+
+		this.videoControls = { play, clock, rate, follow };
+	}
+
+	private videoControls?: {
+		play: HTMLElement;
+		clock: HTMLElement;
+		rate: HTMLSelectElement;
+		follow: HTMLElement;
+	};
+
+	/** Called on every player update: moves the highlight, and follows if you have not read on. */
+	private onPlayerTick(state: PlayerState): void {
+		const controls = this.videoControls;
+		if (controls) {
+			controls.play.setText(state.playing ? "Pause" : "Play");
+			controls.clock.setText(
+				state.duration > 0 ? `${clockOf(state.time)} / ${clockOf(state.duration)}` : clockOf(state.time),
+			);
+			controls.follow.toggleClass("is-off", !this.followPlayback);
+			if (controls.rate.value !== String(state.rate)) controls.rate.value = String(state.rate);
+		}
+
+		if (this.paraStarts.length === 0) return;
+
+		const index = paragraphAt(this.paraStarts, state.time);
+		if (index !== this.focusedPara) {
+			this.setFocusedPara(index);
+			if (this.followPlayback) this.scrollToPara(index);
 		}
 	}
 
-	/** Move the player, via the iframe API. */
+	private setFocusedPara(index: number): void {
+		this.paraRows[this.focusedPara]?.removeClass("is-current");
+		this.focusedPara = Math.min(this.paraRows.length - 1, Math.max(0, index));
+		this.paraRows[this.focusedPara]?.addClass("is-current");
+
+		// The surface is what a clip records, so it has to track where you actually are.
+		if (this.doc) this.doc.view.surface = this.focusedPara + 1;
+	}
+
+	private scrollToPara(index: number): void {
+		this.paraRows[index]?.scrollIntoView({ block: "center", behavior: "smooth" });
+	}
+
+	/**
+	 * Move a paragraph at a time, and take the video with you.
+	 *
+	 * `j`/`k` and the arrows, because this is a reading surface and both sets of hands expect
+	 * their own. Moving seeks rather than merely scrolling — reading and watching stay together.
+	 */
+	private stepPara(delta: number): void {
+		if (this.paraRows.length === 0) return;
+
+		const next = Math.min(this.paraRows.length - 1, Math.max(0, this.focusedPara + delta));
+		this.setFocusedPara(next);
+		this.scrollToPara(next);
+		this.followPlayback = true;
+		this.seekTo(this.paraStarts[next]);
+	}
+
+	private videoStatus(): string {
+		const parts = [`${this.video?.count ?? 0} paragraphs`, "f frame", "q quote", "a all"];
+		parts.push("j/k move", "space play");
+		if (!this.followPlayback) parts.push("not following — g to resume");
+		return parts.join(" · ");
+	}
+
 	private seekTo(seconds: number): void {
-		const frame = this.playerEl?.querySelector("iframe");
-		frame?.contentWindow?.postMessage(
-			JSON.stringify({ event: "command", func: "seekTo", args: [seconds, true] }),
-			"*",
-		);
+		this.link?.seekTo(seconds);
+	}
+
+	/**
+	 * Seek from outside — a timestamp clicked in the note.
+	 *
+	 * Following resumes, because a click on a stamp is a request to watch from there rather
+	 * than to park the video at a point and keep reading elsewhere.
+	 */
+	seekVideo(seconds: number): void {
+		if (!this.video) return;
+		this.followPlayback = true;
+		this.seekTo(seconds);
 	}
 
 	/**
@@ -1342,6 +1516,32 @@ export class ReaderView extends TextFileView {
 			this.deps.log.warn("frame capture failed", error);
 			new Notice(`Reader: ${message}`, 10_000);
 		}
+	}
+
+	/**
+	 * Clip the paragraph you are on, whole.
+	 *
+	 * Selecting a paragraph of speech by hand is fiddly — it has no sentence breaks worth
+	 * aiming at — and the useful unit while watching is the whole thing anyway.
+	 */
+	private async clipWholeParagraph(asParent: boolean): Promise<void> {
+		const video = this.video;
+		if (!video) return;
+
+		const index = this.focusedPara + 1;
+		const text = video.paragraphText(index);
+		if (text.trim() === "") return;
+
+		await this.commit({
+			kind: "quote",
+			text,
+			isParent: asParent,
+			locator: {
+				surface: { kind: "video-frame", index },
+				time: this.paraStarts[this.focusedPara] ?? 0,
+				quote: { exact: text, prefix: "", suffix: "" },
+			},
+		});
 	}
 
 	private async clipRegion(pageNumber: number, rect: NormalisedRect, asParent: boolean): Promise<void> {
@@ -1439,7 +1639,15 @@ export class ReaderView extends TextFileView {
 	 * what carries the moment.
 	 */
 	private async commitFrame(png: Uint8Array, index: number): Promise<void> {
-		const time = this.video?.startOfParagraph(index) ?? 0;
+		/*
+		 * The player's own clock, not the paragraph's.
+		 *
+		 * This used to take the start of whatever paragraph `view.surface` held, which for a
+		 * video barely moved — so every captured frame was stamped with roughly the opening of
+		 * the video and none of them lined up with the picture they contained. The moment the
+		 * shutter fell is the only time that means anything here.
+		 */
+		const time = this.link?.current.time ?? this.video?.startOfParagraph(index) ?? 0;
 
 		await this.commit({
 			kind: "image",

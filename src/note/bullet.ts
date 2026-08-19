@@ -53,16 +53,46 @@ export interface BulletOptions {
  * Quote clips are rendered as a markdown blockquote inside the bullet so they read as the
  * source's words rather than yours — the same distinction the reader skin draws.
  */
+/**
+ * `1:02`, for a clip taken from a video.
+ *
+ * Written into the note deliberately. The original brief said no timestamps — a bare number is
+ * noise next to a picture of the moment. What changed is that the timestamp became a *handle*:
+ * it opens the video at the second the quote was said, which is the difference between a
+ * reference and a citation you can follow.
+ */
+function stampOf(clip: Clip): string {
+	const seconds = clip.locator?.time;
+	if (seconds === undefined || clip.locator?.surface.kind !== "video-frame") return "";
+
+	const whole = Math.max(0, Math.floor(seconds));
+	const h = Math.floor(whole / 3600);
+	const m = Math.floor((whole % 3600) / 60);
+	const s = whole % 60;
+	const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+
+	return `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
+}
+
 export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	const id = blockId(clip.id);
 	const placeholder = options.placeholder ?? "";
+
+	/*
+	 * A link, not a label. `obsidian://` is the only thing a note can hold that Obsidian will
+	 * route back to a plugin, so clicking the stamp opens the document and seeks to it.
+	 */
+	const stamp = stampOf(clip);
+	const stampLink = stamp === ""
+		? ""
+		: `[${stamp}](obsidian://reader-seek?t=${Math.max(0, Math.floor(clip.locator?.time ?? 0))}) `;
 
 	// A child sits one level in from its parent, and its writing line one level in from that.
 	const pad = INDENT.repeat(options.depth ?? 0);
 	const writing = `${pad}${WRITING_LINE}`;
 
 	if (clip.kind !== "quote") {
-		return `${pad}- ![[${clip.assetPath ?? ""}]] ^${id}\n${writing}${placeholder}`;
+		return `${pad}- ${stampLink}![[${clip.assetPath ?? ""}]] ^${id}\n${writing}${placeholder}`;
 	}
 
 	/*
@@ -75,7 +105,9 @@ export function renderBullet(clip: Clip, options: BulletOptions = {}): string {
 	const lines = (clip.text ?? "").split("\n").map((line) => line.trimEnd()).filter((l) => l !== "");
 	if (lines.length === 0) return `${pad}- > ^${id}\n${writing}${placeholder}`;
 
-	const quoted = lines.map((line, i) => (i === 0 ? `${pad}- > ${line}` : `${pad}${INDENT}> ${line}`));
+	const quoted = lines.map((line, i) =>
+		i === 0 ? `${pad}- ${stampLink}> ${line}` : `${pad}${INDENT}> ${line}`,
+	);
 	quoted[quoted.length - 1] += ` ^${id}`;
 
 	return `${quoted.join("\n")}\n${writing}${placeholder}`;
