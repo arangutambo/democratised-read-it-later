@@ -26,6 +26,8 @@ underneath, and a block id so the highlight can find its way home.
 - Desktop and mobile (Obsidian 1.9+); a few features are desktop-only and say so.
 - MIT licensed — see [LICENSE](LICENSE). Recent changes: [CHANGELOG.md](CHANGELOG.md).
 
+Support the project: [Buy Me a Coffee](https://buymeacoffee.com/tonyhad)
+
 ## Contents
 
 - [Getting started](#getting-started) — open your first document
