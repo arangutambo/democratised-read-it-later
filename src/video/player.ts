@@ -80,6 +80,22 @@ export class PlayerLink {
 		this.listener = (event: MessageEvent) => this.receive(event);
 		window.addEventListener("message", this.listener);
 
+		/*
+		 * Unload the caption and annotation modules outright.
+		 *
+		 * `cc_load_policy=0` only sets a default, and an account with "always show captions"
+		 * overrides it — which is why burned-in subtitles kept appearing in captured frames
+		 * despite the parameter. Unloading the module is the instruction the player cannot
+		 * ignore. Repeated because it is only honoured once the player is ready, and there is
+		 * no ready event on this channel.
+		 */
+		for (const delay of [400, 1200, 2500]) {
+			window.setTimeout(() => {
+				this.send("command", "unloadModule", ["captions"]);
+				this.send("command", "unloadModule", ["annotations"]);
+			}, delay);
+		}
+
 		// Four times a second: fine enough that the highlighted paragraph never lags visibly,
 		// coarse enough to be free.
 		this.timer = window.setInterval(() => this.send("listening"), 250);
@@ -147,6 +163,29 @@ export class PlayerLink {
 		// Optimistic, so the transcript jumps immediately rather than on the next poll.
 		this.state = { ...this.state, time: Math.max(0, seconds) };
 		this.onUpdate(this.state);
+	}
+
+	/**
+	 * A frame with nothing on it but the frame.
+	 *
+	 * A paused embed draws its own furniture — the big play button, the link badge, the "More
+	 * videos" strip — and `capturePage` photographs all of it. Playing clears every one of
+	 * them, so a capture taken while paused briefly resumes, waits for the overlay to go, and
+	 * pauses again. The video advances by less than half a second, which is inside the gap
+	 * between transcript paragraphs and so cannot move which one a clip belongs to.
+	 */
+	async withCleanFrame<T>(capture: () => Promise<T>): Promise<T> {
+		const wasPaused = !this.state.playing;
+		if (!wasPaused) return capture();
+
+		this.play();
+		await new Promise((resolve) => window.setTimeout(resolve, 450));
+
+		try {
+			return await capture();
+		} finally {
+			this.pause();
+		}
 	}
 
 	setRate(rate: number): void {

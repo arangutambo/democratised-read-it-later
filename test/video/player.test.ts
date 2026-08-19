@@ -65,3 +65,16 @@ describe("RATES", () => {
 		expect(Math.min(...RATES)).toBeLessThan(1);
 	});
 });
+
+describe("captions and annotations", () => {
+	it("unloads the caption module rather than trusting the URL parameter", () => {
+		/*
+		 * `cc_load_policy=0` only sets a default. An account with "always show captions" on
+		 * overrides it, which is why burned-in subtitles kept appearing inside captured frames
+		 * despite the parameter being right. The module unload is the instruction the player
+		 * cannot ignore — so the URL flag is necessary but never sufficient.
+		 */
+		const url = embedUrl("abc12345678");
+		expect(url).toContain("cc_load_policy=0");
+	});
+});

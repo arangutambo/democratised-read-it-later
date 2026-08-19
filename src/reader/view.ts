@@ -1503,10 +1503,22 @@ export class ReaderView extends TextFileView {
 		if (!this.video || !doc || !player || !this.file) return;
 
 		try {
-			const png = await captureFrame(player.getBoundingClientRect(), {
-				pixelRatio: window.devicePixelRatio,
-				webContents: () => currentWebContents(),
-			});
+			/*
+			 * Resumed for the shot if it was paused: a paused embed draws its own furniture —
+			 * the play button, the link badge, the "More videos" strip — and `capturePage`
+			 * photographs whatever is drawn.
+			 */
+			const png = await (this.link
+				? this.link.withCleanFrame(() =>
+						captureFrame(player.getBoundingClientRect(), {
+							pixelRatio: window.devicePixelRatio,
+							webContents: () => currentWebContents(),
+						}),
+					)
+				: captureFrame(player.getBoundingClientRect(), {
+						pixelRatio: window.devicePixelRatio,
+						webContents: () => currentWebContents(),
+					}));
 
 			const index = this.doc?.view.surface ?? 1;
 			await this.commitFrame(png, index);

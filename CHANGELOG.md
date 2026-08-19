@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+**Captured frames are just the frame now.** Two things were getting into them.
+Burned-in subtitles survived `cc_load_policy=0`, because that parameter only
+sets a default and an account with "always show captions" overrides it — the
+caption module is now unloaded outright, which the player cannot ignore. And a
+paused embed draws its own furniture, the play button and link badge and "More
+videos" strip, all of which `capturePage` photographed; a capture taken while
+paused now briefly resumes, shoots, and pauses again. The video moves less than
+half a second, well inside the gap between transcript paragraphs.
+
+Screenshots added to the README, and a Buy Me a Coffee link.
+
 ## 0.3.0
 
 **Save a YouTube video by pasting its link**
