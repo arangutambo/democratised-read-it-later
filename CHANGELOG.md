@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0
+
+**Save a page to Reader**
+- Paste a URL and the article is written into your vault as a document you own:
+  readable offline, greppable, and clipped with the same keys as everything
+  else. Sanitised before it is written, not when it is read, so third-party
+  HTML never reaches disk in its raw form.
+- Only `http` and `https` are accepted — inside Electron a `file:` or `app:`
+  URL reaches the filesystem, and that string arrives from a paste box.
+- A page that comes back with no readable text fails loudly rather than saving
+  an empty document.
+
+**Fixed**
+- <kbd>f</kbd> opens find again in PDFs, EPUBs and articles. It had been
+  shadowed by the video frame capture added in 0.1.0 — two `case "f"` clauses,
+  the second unreachable — so outside a video the key did nothing at all.
+
+**Renamed**
+- The plugin is now *Democratised Read It Later*, id
+  `democratised-read-it-later`. A vault carrying the old `reader` folder should
+  delete it once this version is enabled, or the two will both load.
+
 ## 0.1.0 — first release
 
 Read a document inside Obsidian and choose what enters your vault.

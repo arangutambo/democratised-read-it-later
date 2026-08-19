@@ -795,11 +795,13 @@ export class ReaderView extends TextFileView {
 				void this.clipSelection(asParent);
 				break;
 			case "f":
-				// The frame on screen, as a parent. Only means anything for a video.
-				if (this.video) {
-					event.preventDefault();
-					void this.clipFrame();
-				}
+				event.preventDefault();
+				// The frame on screen, as a parent — but only a video has a frame. Everywhere
+				// else `f` is find, which is what it is everywhere in Obsidian. These were two
+				// separate clauses until 0.2.0, and the second one could never run: `f` opened
+				// nothing at all in a PDF, an EPUB or an article.
+				if (this.video) void this.clipFrame();
+				else this.toggleSearch(true);
 				break;
 			case "r":
 				event.preventDefault();
@@ -830,10 +832,6 @@ export class ReaderView extends TextFileView {
 			case "p":
 				event.preventDefault();
 				void this.clipWholePage(asParent);
-				break;
-			case "f":
-				event.preventDefault();
-				this.toggleSearch(true);
 				break;
 			case "o":
 				event.preventDefault();

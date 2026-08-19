@@ -144,6 +144,15 @@ publisher's own image file at full resolution rather than a screenshot of it.
 
 ### Web articles
 
+**Save a page by pasting its URL.** *Save a page to Reader* takes a link and
+writes the article into your vault as a local document — readable offline,
+greppable, clipped with the same keys, and unaffected by the site going away
+later. It is sanitised before it is written rather than when it is read, so the
+dangerous shapes never reach your disk at all. Only `http` and `https` are
+accepted, and a page with no readable text in it fails loudly instead of saving
+you an empty file. This is the one thing here that reaches the network without
+an API key, and only when you ask it to.
+
 Saved `.html` opens as a readable document. **Images are not fetched.** Every
 image in a saved article lives on someone else's server, so loading one tells
 that host your IP and the moment you opened the page — which is exactly how a
