@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.10.0
+
+Halves the community review's remaining findings, and settles the rest with
+evidence rather than argument.
+
+**The `require()` warnings are gone.** 0.7.0 moved every Node builtin to a
+`require()` behind a `Platform.isDesktopApp` check, because that is what the
+review asked for. The review then flagged all sixteen of them under a second
+rule: "a `require()` style import is forbidden". Measured against the linter
+itself, a static import is reported once, a guarded `require()` twice, and a
+guarded dynamic `import()` once — but that last one does not survive esbuild as
+anything the renderer can load. So the builtins are statically imported again,
+which is the least-reported form that also works.
+
+The safety property that made the guard worth having is kept, and is now
+stronger than it was: every module touching a builtin calls `assertDesktop()` at
+load, so a caller that loses its desktop check fails with a sentence naming the
+module instead of an `undefined is not a function` later. An architecture test
+fails if any such module stops announcing it.
+
+**What could not be fixed, and why.** The remaining Node warnings cannot be
+removed by any arrangement of imports — the rule matches the module's name, not
+how it is reached. Removing them means removing the Apple Books and Zotero
+importers and the ability to open a file from outside the vault.
+
+The three `createElement` warnings are the same shape. The rule's preferred
+form, `doc.createEl("img")`, lints clean and *throws*: `createEl` is declared on
+`Node` and appends to the node it is called on, so on a document it raises
+`HierarchyRequestError: Only one element on document allowed` — verified in a
+real Obsidian window. The form that works needs `win`, an Obsidian augmentation
+a parsed document does not have outside the app.
+
 ## 0.9.0
 
 **Renamed to Reading Room.** The 0.8.0 name, Marginalia, was rejected by the

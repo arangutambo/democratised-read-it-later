@@ -11,12 +11,11 @@
  * `await import("./external-file")` — deferring the *local* module, never the builtin.
  * `test/architecture.test.ts` asserts nothing in `src/` ever imports `node:` dynamically.
  */
-import { onDesktop } from "../platform/node";
+import { assertDesktop } from "../platform/node";
+import { readFile, stat } from "node:fs/promises";
 
-// Node's own modules, guarded — see `core/node.ts`.
-const { readFile, stat } = onDesktop("node:fs/promises", () =>
-	require("node:fs/promises") as typeof import("node:fs/promises"),
-);
+// Loaded only from desktop-gated call sites; this makes a mistake say so at once.
+assertDesktop("external-file.ts");
 
 /*
  * Why the Node builtins below are imported statically.

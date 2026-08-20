@@ -17,6 +17,7 @@
  * No `obsidian` import — see PLAN-V2.md §3.1.
  */
 
+
 export interface ArticleSection {
 	index: number;
 	/** The heading that opens this section, when it has one. Becomes the table of contents. */

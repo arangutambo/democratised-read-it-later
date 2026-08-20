@@ -24,12 +24,11 @@ import { makeCitekey } from "../../core/ids";
 import { readZotero, locateZotero, type ZoteroReadResult } from "./db";
 import { buildCsl, resolveAttachmentPath } from "./map";
 import type { Csl } from "../../core/types";
-import { onDesktop } from "../../platform/node";
+import { assertDesktop } from "../../platform/node";
+import nodePath from "node:path";
 
-// Node's own modules, guarded — see `core/node.ts`.
-const nodePath = onDesktop("node:path", () =>
-	require("node:path") as typeof import("node:path"),
-);
+// Loaded only from desktop-gated call sites; this makes a mistake say so at once.
+assertDesktop("lookup.ts");
 
 export interface PaperMatch {
 	citekey: string;

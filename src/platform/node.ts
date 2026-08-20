@@ -1,41 +1,38 @@
 /**
- * Reaching Node's own modules from a plugin that also runs on mobile.
+ * The guard in front of the modules that need Node.
  *
- * Three constraints meet here, and only one arrangement satisfies all of them.
+ * Obsidian's own review asks for Node builtins to be reached through a `require()` or dynamic
+ * `import()` behind a `Platform.isDesktopApp` check. Both were tried, and neither is available:
  *
- * Mobile has no Node, so nothing may import a builtin at the top of a module the mobile app
- * loads. A *dynamic* `await import("node:fs")` is not the answer: esbuild leaves it as a real
- * ESM import, the renderer fetches it as a URL, and Obsidian's `app://obsidian.md` origin turns
- * that into a CORS failure — that happened in a real window. And a static import is what the
- * community review flags, because it cannot see that the module holding it is itself only ever
- * loaded on desktop.
+ * - A dynamic `await import("node:fs")` survives esbuild as a real ESM import, which the
+ *   renderer fetches as a URL and Obsidian's `app://obsidian.md` origin refuses. Verified by
+ *   compiling it and reading the output; it also reached a real window once.
+ * - A guarded `require()` works perfectly, and the reviewer's *other* rule forbids `require()`
+ *   outright — so that form is reported twice rather than once.
  *
- * `require()` behind a `Platform.isDesktopApp` check is the arrangement that works, and it is
- * what the review asks for. It is resolved synchronously by Electron, it is never evaluated on
- * a platform that lacks it, and the guard turns a mistaken import into a sentence rather than a
- * stack trace about `fs` being undefined.
+ * The rule fires on the name of the module, not on how it is reached, so no arrangement of
+ * imports satisfies it. What is left is to make the safety property real rather than implied: a
+ * module that needs Node says so, out loud, the moment it is loaded.
  *
- * Callers destructure at module scope, so the shape of the code that uses these is unchanged:
- *
- * ```ts
- * const { readFile } = onDesktop("node:fs/promises", () => require("node:fs/promises") as typeof import("node:fs/promises"));
- * ```
+ * That is what this is. Modules touching a builtin call `assertDesktop()` at module scope, and
+ * because they are only ever reached through a lazy `import("./that-module")` behind a
+ * `Platform.isDesktopApp` check, the assertion never fires in normal use. When it does, it means
+ * a caller lost its guard — and it says that, instead of failing later as `undefined is not a
+ * function`.
  */
 
 import { Platform } from "obsidian";
 
 /**
- * Load something that only exists on the desktop.
+ * Refuse to be loaded anywhere without Node.
  *
- * The loader is a callback rather than a module name so the `require` stays a literal at the
- * call site — esbuild can only mark a builtin external when it can see which one it is.
+ * Called for its side effect at the top of a module, so the failure lands at the import rather
+ * than at the first call into it.
  */
-export function onDesktop<T>(id: string, load: () => T): T {
+export function assertDesktop(module: string): void {
 	if (!Platform.isDesktopApp) {
 		throw new Error(
-			`${id} is part of Node, which the mobile app does not have. This feature is desktop only.`,
+			`${module} needs Node, which the mobile app does not have. This feature is desktop only.`,
 		);
 	}
-
-	return load();
 }

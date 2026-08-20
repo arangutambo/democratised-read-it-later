@@ -109,15 +109,23 @@ describe("architecture", () => {
 		expect(offenders).toEqual([]);
 	});
 
-	it("reaches node builtins only through the desktop guard", () => {
+	it("makes every module that needs node say so", () => {
 		/*
-		 * The other half of the same rule, and the one the community review asks for: a static
-		 * `import … from "node:fs"` is invisible to the reviewer's scanner as anything but a
-		 * mobile crash waiting to happen, because it cannot see that the module holding it is
-		 * only ever loaded on desktop. `onDesktop()` says it in the code instead.
+		 * The builtins are imported statically, because every alternative is worse: a dynamic
+		 * `import("node:fs")` becomes a URL fetch the `app://` origin refuses, and a guarded
+		 * `require()` is reported twice by the community linter rather than once. The rule
+		 * fires on the module's name, not on how it is reached, so no arrangement satisfies it.
+		 *
+		 * What can be guaranteed is the safety property underneath it: anything reaching for
+		 * Node announces that at load, so a caller that loses its `Platform.isDesktopApp` check
+		 * fails with a sentence instead of a mystery.
 		 */
 		const offenders = walk(SRC)
-			.filter((file) => /^import\s[^;]*from\s*["']node:/m.test(stripComments(readFileSync(file, "utf8"))))
+			.filter((file) => {
+				const source = stripComments(readFileSync(file, "utf8"));
+				const needsNode = /^import\s[^;]*from\s*["']node:/m.test(source);
+				return needsNode && !/assertDesktop\(/.test(source);
+			})
 			.map((file) => path.relative(SRC, file));
 
 		expect(offenders).toEqual([]);

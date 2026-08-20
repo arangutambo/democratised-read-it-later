@@ -18,27 +18,16 @@
  * need recompiling per Electron version, and sql.js would add ~1.5 MB of WASM for features
  * that cannot run on mobile anyway.
  */
-import { onDesktop } from "../platform/node";
+import { assertDesktop } from "../platform/node";
+import { execFile } from "node:child_process";
+import { access, copyFile, mkdtemp, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 
-// Node's own modules, guarded — see `core/node.ts`.
-const { execFile } = onDesktop("node:child_process", () =>
-	require("node:child_process") as typeof import("node:child_process"),
-);
-const { access, copyFile, mkdtemp, rm } = onDesktop("node:fs/promises", () =>
-	require("node:fs/promises") as typeof import("node:fs/promises"),
-);
-const { constants } = onDesktop("node:fs", () =>
-	require("node:fs") as typeof import("node:fs"),
-);
-const { tmpdir } = onDesktop("node:os", () =>
-	require("node:os") as typeof import("node:os"),
-);
-const path = onDesktop("node:path", () =>
-	require("node:path") as typeof import("node:path"),
-);
-const { promisify } = onDesktop("node:util", () =>
-	require("node:util") as typeof import("node:util"),
-);
+// Loaded only from desktop-gated call sites; this makes a mistake say so at once.
+assertDesktop("sqlite.ts");
 
 /*
  * Why the Node builtins below are imported statically.

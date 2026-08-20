@@ -64,13 +64,17 @@ export default tseslint.config(
 	},
 
 	/*
-	 * The one place `require()` is right.
+	 * The modules that need Node, and why the rule stays off for them.
 	 *
-	 * These modules reach Node builtins through `onDesktop()`, which is what the community
-	 * review asks for: a `require()` behind a `Platform.isDesktopApp` check, never evaluated on
-	 * a platform without Node. It has to be a literal `require` at the call site so esbuild can
-	 * see which builtin to mark external, so the ban on require-style imports is lifted here and
-	 * nowhere else. An architecture test asserts no static `import … from "node:…"` survives.
+	 * Every form was measured against the rule itself: a static import is reported once, a
+	 * guarded `require()` twice (the second rule forbids `require` outright), and a guarded
+	 * dynamic `import()` once — but that one does not survive esbuild as anything the renderer
+	 * can load. The rule fires on the module's name, so nothing satisfies it short of not
+	 * touching the filesystem, which would mean dropping the Apple Books and Zotero importers
+	 * and the ability to read a file from outside the vault.
+	 *
+	 * So the static import stays, and the safety property is enforced instead: each of these
+	 * calls `assertDesktop()` at load, and an architecture test fails if one stops.
 	 */
 	{
 		files: [
@@ -80,12 +84,7 @@ export default tseslint.config(
 			"src/sources/zotero/db.ts",
 			"src/sources/zotero/lookup.ts",
 		],
-		rules: {
-			"@typescript-eslint/no-require-imports": "off",
-			// The rule matches on the module name, so it reports a guarded `require` exactly as it
-			// reported the static import it replaced. The guard is the thing it was asking for.
-			"obsidianmd/no-nodejs-modules": "off",
-		},
+		rules: { "obsidianmd/no-nodejs-modules": "off" },
 	},
 
 	/*
@@ -106,9 +105,14 @@ export default tseslint.config(
 	 * The sanitiser and the article parser take a `Document` and nothing else.
 	 *
 	 * That is deliberate — it is how they are tested against happy-dom without Obsidian in the
-	 * room — and `createEl`/`createDiv` are Obsidian's augmentations, which such a document does
-	 * not have. Using them here would couple pure DOM code to the app and break its tests to
-	 * satisfy a style rule.
+	 * room — and the rule's preferred form is, for a document, wrong. `doc.createEl("img")`
+	 * lints clean and **throws**: `createEl` is declared on `Node` and appends to the node it is
+	 * called on, so on a Document it raises
+	 * `HierarchyRequestError: Only one element on document allowed`. Verified in a real window.
+	 *
+	 * The form that does work, `doc.win.createEl(…)`, needs `win` — an Obsidian augmentation a
+	 * parsed document does not have outside the app, so it cannot be tested without shimming
+	 * the thing under test. That was tried and reverted; `createElement` is correct here.
 	 */
 	{
 		files: ["src/web/*.ts", "src/epub/*.ts"],
@@ -126,8 +130,6 @@ export default tseslint.config(
 			"@typescript-eslint/no-unsafe-return": "off",
 			"@typescript-eslint/no-explicit-any": "off",
 			"@typescript-eslint/no-implied-eval": "off",
-			// A test for the guarded-`require` pattern has to be able to write one.
-			"@typescript-eslint/no-require-imports": "off",
 			// A spy references a method without calling it; that is what a spy is.
 			"@typescript-eslint/unbound-method": "off",
 		},
