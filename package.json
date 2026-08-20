@@ -1,6 +1,6 @@
 {
 	"name": "democratised-read-it-later",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"description": "Read-it-later, reader mode, highlighting and research capture for Obsidian.",
 	"main": "main.js",
 	"scripts": {

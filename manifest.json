@@ -1,9 +1,9 @@
 {
 	"id": "democratised-read-it-later",
-	"name": "YouTube, EPUB and PDF Viewer and Note Taker",
-	"version": "0.7.0",
+	"name": "Marginalia",
+	"version": "0.8.0",
 	"minAppVersion": "1.13.0",
-	"description": "Read PDFs, EPUBs, articles and video transcripts, and clip what matters into your notes — a passage becomes a quote, a dragged box becomes an image, and you write underneath it.",
+	"description": "Read, highlight and annotate PDFs, EPUBs, web articles and YouTube transcripts in your vault. A passage becomes a quote, a dragged box becomes an image, and every highlight stays anchored to its source.",
 	"author": "Antoine Haddad",
 	"isDesktopOnly": false
 }

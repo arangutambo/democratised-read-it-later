@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+**Renamed to Marginalia** — the word for notes written in a book's margins,
+which is the whole idea. The previous name was a list of search terms rather
+than a name, and the community directory rejected it on exactly those grounds.
+
+The description now carries the keywords instead, which is where they belong:
+the directory's search matches on it, so "pdf", "epub", "annotate", "highlight"
+and "youtube transcript" all find this plugin without the name having to spell
+them out.
+
+Only the display name changed. The plugin id stays `democratised-read-it-later`
+— it is the folder your install lives in and the key your settings are stored
+under, so this is an update rather than a second plugin, and nothing needs
+moving. Reload Obsidian to see the new name in your plugin list.
+
 ## 0.7.0
 
 The second round of community-review findings, and the tests that keep them
