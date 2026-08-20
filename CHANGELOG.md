@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0
+
+**Renamed to Reading Room.** The 0.8.0 name, Marginalia, was rejected by the
+directory for colliding with existing entries — it sits inside "Cornell
+Marginalia" and "EPUB Marginalia", and contains "Margin", which is a plugin in
+its own right.
+
+The name was checked properly this time: against all 7,701 plugin *and* theme
+names, in both directions. Themes share the namespace, which is what quietly
+ruled out several otherwise-good words.
+
+Only the display name changed. The id stays `democratised-read-it-later`, so
+this remains an update to the plugin you already have rather than a second copy
+of it. Reload Obsidian to see the new name.
+
 ## 0.8.0
 
 **Renamed to Marginalia** — the word for notes written in a book's margins,

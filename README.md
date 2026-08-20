@@ -1,4 +1,4 @@
-# Marginalia
+# Reading Room
 
 **Read the document inside Obsidian and choose what goes into your vault. Clip a
 passage or drag a box around a figure, have it land as a quote or an image, and
@@ -45,7 +45,7 @@ Support the project: [Buy Me a Coffee](https://buymeacoffee.com/tonyhad)
 
 1. **Install & enable.** Copy `main.js`, `manifest.json` and `styles.css` into
    `.obsidian/plugins/democratised-read-it-later/`, then Settings → Community plugins → enable
-   **Marginalia**.
+   **Reading Room**.
 2. **Open a document.** Right-click any PDF, EPUB or `.html` in the file explorer
    and choose **Open in Reader**. (Reader registers its own `.reader` file type
    rather than taking over `.pdf`, so Obsidian's built-in PDF viewer keeps
