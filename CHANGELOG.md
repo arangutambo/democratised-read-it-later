@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0
+
+The second round of community-review findings, and the tests that keep them
+fixed.
+
+**Node builtins are reached through a desktop guard.** Every
+`import … from "node:fs"` in the plugin is now a `require()` behind a
+`Platform.isDesktopApp` check, which is exactly what the review asked for. The
+importers that use them — Apple Books, Zotero, and reading a file from outside
+the vault — were already desktop-only and loaded lazily; the difference is that
+the code says so now instead of a comment saying so. Loading one on mobile
+raises a sentence you can act on rather than failing somewhere downstream.
+
+Two architecture tests hold the line: no static `node:` import may return, and
+the existing rule against *dynamic* `import("node:…")` — which Obsidian's
+`app://` origin turns into a CORS failure — now understands that
+`typeof import("node:fs")` is a type, erased before anything runs.
+
+**Documented what the clipboard read actually does.** Opening *Save a page to
+Reader* reads the clipboard once. It is used only if it is an `http(s)` URL and
+you have not typed anything; anything else is dropped on the spot, never stored,
+never written to disk, never sent anywhere.
+
+**A test that the dev tools stay out of the plugin.** `tools/` holds Node
+dry-run harnesses that import `node:fs` freely, which is correct because they
+only ever run under Node — and nothing in `src/` reaches them, so none of it is
+bundled. That is now asserted rather than assumed.
+
 ## 0.6.0
 
 **Renamed to YouTube, EPUB and PDF Viewer and Note Taker.** The name now says

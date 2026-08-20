@@ -20,12 +20,16 @@
  * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
  */
 
-import { basename } from "node:path";
-
 import { makeCitekey } from "../../core/ids";
 import { readZotero, locateZotero, type ZoteroReadResult } from "./db";
 import { buildCsl, resolveAttachmentPath } from "./map";
 import type { Csl } from "../../core/types";
+import { onDesktop } from "../../platform/node";
+
+// Node's own modules, guarded — see `core/node.ts`.
+const nodePath = onDesktop("node:path", () =>
+	require("node:path") as typeof import("node:path"),
+);
 
 export interface PaperMatch {
 	citekey: string;
@@ -96,7 +100,7 @@ export class ZoteroIndex {
 			this.byPath.set(normalisePath(path), attachment.parentItemID);
 			// A filename is a weaker key and collisions are real, so first one wins and the
 			// match is reported as such.
-			const name = basename(path).toLowerCase();
+			const name = nodePath.basename(path).toLowerCase();
 			if (!this.byFilename.has(name)) this.byFilename.set(name, attachment.parentItemID);
 		}
 	}
@@ -129,7 +133,7 @@ export class ZoteroIndex {
 		const byPath = this.byPath.get(normalisePath(pdfPath));
 		if (byPath !== undefined) return this.matchFor(byPath, "path");
 
-		const byName = this.byFilename.get(basename(pdfPath).toLowerCase());
+		const byName = this.byFilename.get(nodePath.basename(pdfPath).toLowerCase());
 		return byName === undefined ? undefined : this.matchFor(byName, "filename");
 	}
 

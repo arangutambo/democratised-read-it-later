@@ -11,6 +11,12 @@
  * `await import("./external-file")` — deferring the *local* module, never the builtin.
  * `test/architecture.test.ts` asserts nothing in `src/` ever imports `node:` dynamically.
  */
+import { onDesktop } from "../platform/node";
+
+// Node's own modules, guarded — see `core/node.ts`.
+const { readFile, stat } = onDesktop("node:fs/promises", () =>
+	require("node:fs/promises") as typeof import("node:fs/promises"),
+);
 
 /*
  * Why the Node builtins below are imported statically.
@@ -23,8 +29,6 @@
  * What keeps this off mobile is the *module* being imported lazily behind a
  * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
  */
-
-import { readFile, stat } from "node:fs/promises";
 
 export class ExternalFileError extends Error {}
 

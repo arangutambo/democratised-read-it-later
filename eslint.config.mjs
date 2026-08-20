@@ -64,16 +64,13 @@ export default tseslint.config(
 	},
 
 	/*
-	 * The desktop-only modules, and why their Node imports are static.
+	 * The one place `require()` is right.
 	 *
-	 * esbuild turns a *static* import of a builtin into `require()`, which Electron resolves
-	 * natively. A *dynamic* `await import("node:fs")` survives as a real ESM import, which the
-	 * renderer fetches as a URL — and Obsidian's `app://obsidian.md` origin turns that into a
-	 * CORS failure. That is written up in `external-file.ts`, and it happened in a real window.
-	 *
-	 * What keeps these off mobile is not how the builtin is imported but when the *module* is:
-	 * each one is reached only through a dynamic import behind a `Platform.isDesktopApp` check,
-	 * and every call site has one.
+	 * These modules reach Node builtins through `onDesktop()`, which is what the community
+	 * review asks for: a `require()` behind a `Platform.isDesktopApp` check, never evaluated on
+	 * a platform without Node. It has to be a literal `require` at the call site so esbuild can
+	 * see which builtin to mark external, so the ban on require-style imports is lifted here and
+	 * nowhere else. An architecture test asserts no static `import … from "node:…"` survives.
 	 */
 	{
 		files: [
@@ -83,7 +80,12 @@ export default tseslint.config(
 			"src/sources/zotero/db.ts",
 			"src/sources/zotero/lookup.ts",
 		],
-		rules: { "obsidianmd/no-nodejs-modules": "off" },
+		rules: {
+			"@typescript-eslint/no-require-imports": "off",
+			// The rule matches on the module name, so it reports a guarded `require` exactly as it
+			// reported the static import it replaced. The guard is the thing it was asking for.
+			"obsidianmd/no-nodejs-modules": "off",
+		},
 	},
 
 	/*
@@ -124,6 +126,8 @@ export default tseslint.config(
 			"@typescript-eslint/no-unsafe-return": "off",
 			"@typescript-eslint/no-explicit-any": "off",
 			"@typescript-eslint/no-implied-eval": "off",
+			// A test for the guarded-`require` pattern has to be able to write one.
+			"@typescript-eslint/no-require-imports": "off",
 			// A spy references a method without calling it; that is what a spy is.
 			"@typescript-eslint/unbound-method": "off",
 		},

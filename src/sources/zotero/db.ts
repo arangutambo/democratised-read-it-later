@@ -20,9 +20,6 @@
  * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
  */
 
-import { homedir } from "node:os";
-import path from "node:path";
-
 import {
 	assertSqliteAvailable,
 	exists,
@@ -36,6 +33,15 @@ import type {
 	ZoteroFieldRow,
 	ZoteroItemRow,
 } from "./map";
+import { onDesktop } from "../../platform/node";
+
+// Node's own modules, guarded — see `core/node.ts`.
+const { homedir } = onDesktop("node:os", () =>
+	require("node:os") as typeof import("node:os"),
+);
+const path = onDesktop("node:path", () =>
+	require("node:path") as typeof import("node:path"),
+);
 
 export { assertSqliteAvailable };
 

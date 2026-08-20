@@ -94,7 +94,45 @@ describe("architecture", () => {
 		 * imports, not by making the builtin import itself dynamic.
 		 */
 		const offenders = walk(SRC)
-			.filter((file) => /import\s*\(\s*["']node:/.test(stripComments(readFileSync(file, "utf8"))))
+			.filter((file) => {
+				// `typeof import("node:fs")` is a *type* position. It is erased before anything
+				// runs, so it cannot become a URL fetch — and the guarded `require()` helper
+				// uses it to keep the builtins typed. Only a real call is an offence.
+				const source = stripComments(readFileSync(file, "utf8")).replace(
+					/typeof\s+import\s*\(/g,
+					"typeofImport(",
+				);
+				return /import\s*\(\s*["']node:/.test(source);
+			})
+			.map((file) => path.relative(SRC, file));
+
+		expect(offenders).toEqual([]);
+	});
+
+	it("reaches node builtins only through the desktop guard", () => {
+		/*
+		 * The other half of the same rule, and the one the community review asks for: a static
+		 * `import … from "node:fs"` is invisible to the reviewer's scanner as anything but a
+		 * mobile crash waiting to happen, because it cannot see that the module holding it is
+		 * only ever loaded on desktop. `onDesktop()` says it in the code instead.
+		 */
+		const offenders = walk(SRC)
+			.filter((file) => /^import\s[^;]*from\s*["']node:/m.test(stripComments(readFileSync(file, "utf8"))))
+			.map((file) => path.relative(SRC, file));
+
+		expect(offenders).toEqual([]);
+	});
+
+	it("never pulls the dev tools into shipped code", () => {
+		/*
+		 * `tools/` holds Node dry-run harnesses, and they import `node:fs` freely because they
+		 * only ever run under Node. That is fine precisely because nothing in `src/` reaches
+		 * them, so none of it is bundled into `main.js` — which is worth asserting rather than
+		 * asserting in a comment, since a scanner reading the repository sees those imports and
+		 * cannot tell the difference.
+		 */
+		const offenders = walk(SRC)
+			.filter((file) => /from\s*["'][^"']*\/tools\//.test(stripComments(readFileSync(file, "utf8"))))
 			.map((file) => path.relative(SRC, file));
 
 		expect(offenders).toEqual([]);

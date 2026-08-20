@@ -145,7 +145,13 @@ export class SaveUrlModal extends Modal {
 			.addButton((button) => button.setButtonText("Cancel").onClick(() => this.close()))
 			.addButton((button) => button.setButtonText("Save").setCta().onClick(() => void save()));
 
-		// Paste-and-go: the clipboard almost always already holds the link.
+		/*
+		 * Paste-and-go: the clipboard almost always already holds the link.
+		 *
+		 * Read once, when you open this box, and only used if it is an http(s) URL and you have
+		 * not typed anything. Anything else is dropped on the spot — never stored, never written
+		 * to disk, never sent anywhere. If the read is refused, the box is simply empty.
+		 */
 		window.setTimeout(() => {
 			input.focus();
 			void navigator.clipboard

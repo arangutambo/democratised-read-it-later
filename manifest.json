@@ -1,7 +1,7 @@
 {
 	"id": "democratised-read-it-later",
 	"name": "YouTube, EPUB and PDF Viewer and Note Taker",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"minAppVersion": "1.13.0",
 	"description": "Read PDFs, EPUBs, articles and video transcripts, and clip what matters into your notes — a passage becomes a quote, a dragged box becomes an image, and you write underneath it.",
 	"author": "Antoine Haddad",

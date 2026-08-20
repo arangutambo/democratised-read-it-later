@@ -29,13 +29,6 @@
  * `Platform.isDesktopApp` check at every call site, which is checked at each of them.
  */
 
-import { execFile } from "node:child_process";
-import { mkdtemp, copyFile, rm, readdir, access } from "node:fs/promises";
-import { constants } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
-
 import {
 	ANNOTATION_SPEC,
 	ANNOTATION_TABLE,
@@ -44,6 +37,27 @@ import {
 	planSelect,
 } from "./schema";
 import type { BooksAnnotationRow, BooksAssetRow } from "./map";
+import { onDesktop } from "../../platform/node";
+
+// Node's own modules, guarded — see `core/node.ts`.
+const { execFile } = onDesktop("node:child_process", () =>
+	require("node:child_process") as typeof import("node:child_process"),
+);
+const { mkdtemp, copyFile, rm, readdir, access } = onDesktop("node:fs/promises", () =>
+	require("node:fs/promises") as typeof import("node:fs/promises"),
+);
+const { constants } = onDesktop("node:fs", () =>
+	require("node:fs") as typeof import("node:fs"),
+);
+const { homedir, tmpdir } = onDesktop("node:os", () =>
+	require("node:os") as typeof import("node:os"),
+);
+const path = onDesktop("node:path", () =>
+	require("node:path") as typeof import("node:path"),
+);
+const { promisify } = onDesktop("node:util", () =>
+	require("node:util") as typeof import("node:util"),
+);
 
 const execFileAsync = promisify(execFile);
 
