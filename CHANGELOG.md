@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+**Renamed to YouTube, EPUB and PDF Viewer and Note Taker.** The name now says
+what the plugin does rather than what it was reacting to.
+
+Only the display name changed. The plugin id stays `democratised-read-it-later`,
+which is the folder your install lives in and the key your settings are stored
+under — so this is an update, not a second plugin, and nothing needs moving.
+You may need to reload Obsidian before the new name appears in the plugin list.
+
 ## 0.5.0
 
 Everything the Obsidian community review raised, and the linter that would have
