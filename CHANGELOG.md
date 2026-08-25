@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.12.0
+
+**Deleting a document can now take its file and note with it.** Off by default;
+turn on *Removing documents → "Deleting a document takes its file and note with
+it"* in settings. With it on, removing a `.reader` any way at all — a hotkey, the
+file explorer, the library — trashes the original PDF and the companion note too,
+so originals stop accumulating in your vault after every delete.
+
+Off, nothing changes: deleting a document takes it off the shelf and leaves your
+file and your writing where they are, which is what it has always meant.
+
+Two things it will not do. It never touches a source that lives outside the
+vault — that file was never copied in and is not this plugin's to remove. And it
+only ever trashes, following your vault's own trash setting, so a wrong answer
+is recoverable.
+
+Worth knowing before switching it on: a deletion arriving from Obsidian Sync is
+still a deletion, so a document removed on another device takes its file and
+note here too.
+
+**A command for the full delete.** *"Delete this document, its note and its
+file"* can be given a hotkey — <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>, for
+instance — so the whole thing goes in one keystroke, after a confirmation that
+tells you how much of your own writing is in the note first.
+
 ## 0.11.0
 
 **Drag files onto the library to add them.** Drop a PDF, EPUB or saved web page

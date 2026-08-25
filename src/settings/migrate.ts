@@ -210,6 +210,7 @@ export function migrateSettings(
 			0,
 			1,
 		),
+		deleteEverything: asBoolean(data.deleteEverything, DEFAULT_SETTINGS.deleteEverything),
 		logLevel: asLogLevel(data.logLevel, DEFAULT_SETTINGS.logLevel),
 	};
 

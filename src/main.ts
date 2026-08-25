@@ -3,6 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile } from "obsidian";
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
 import { findExcalidraw } from "./excalidraw/handoff";
+import { DocumentLinks } from "./library/links";
 import { LIBRARY_VIEW_TYPE, LibraryView, type AddedToLibrary } from "./library/view";
 import { isReadable, kindOf } from "./reader/open";
 import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
@@ -34,6 +35,14 @@ export default class ReaderPlugin extends Plugin {
 	 * PDF is replaced by a newer edition.
 	 */
 	private readonly pageCounts = new Map<string, number>();
+
+	/**
+	 * What each `.reader` points at, for cascading a delete.
+	 *
+	 * Only populated when "deleting a document takes its file and note with it" is on, because
+	 * a vault of 2,000 documents should not pay to index them for a feature it is not using.
+	 */
+	private readonly links = new DocumentLinks();
 
 	/** Built on first use; a second paper must not re-copy and re-read the whole library. */
 	private zoteroIndex?: import("./sources/zotero/lookup").ZoteroIndex;
@@ -138,6 +147,19 @@ export default class ReaderPlugin extends Plugin {
 				(leaf.view as ReaderView).seekVideo(seconds);
 			}
 		});
+
+		this.addCommand({
+			id: "delete-document-and-note",
+			name: "Delete this document, its note and its file",
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== "reader") return false;
+				if (!checking) void this.deleteEverythingFor(file);
+				return true;
+			},
+		});
+
+		this.watchForDeletions();
 
 		this.log.info(`loaded v${this.manifest.version}`);
 	}
@@ -476,6 +498,160 @@ export default class ReaderPlugin extends Plugin {
 	}
 
 	/**
+	 * Keep track of what each document points at, so a deletion can follow it.
+	 *
+	 * Obsidian has no event before a file goes, and a `.reader` that has been deleted cannot be
+	 * asked what it belonged to — so the mapping is built ahead of time. Only when the setting
+	 * that uses it is on, and only after the workspace is up, so opening a vault is not made
+	 * slower for a feature that is off by default.
+	 */
+	private watchForDeletions(): void {
+		// Registered unconditionally: a listener that returns immediately costs nothing, and
+		// making them conditional means switching the setting on does nothing until a reload,
+		// which is the sort of thing people reasonably read as broken.
+		this.app.workspace.onLayoutReady(() => void this.indexIfWanted());
+
+		this.registerEvent(
+			this.app.vault.on("create", (file) => void this.rememberDocument(file.path)),
+		);
+		this.registerEvent(
+			this.app.vault.on("modify", (file) => void this.rememberDocument(file.path)),
+		);
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => this.links.rename(oldPath, file.path)),
+		);
+		this.registerEvent(
+			this.app.vault.on("delete", (file) => void this.cascadeDelete(file.path)),
+		);
+	}
+
+	/** Build the index if the setting wants it and it is not already built. */
+	private async indexIfWanted(): Promise<void> {
+		if (!this.settings.deleteEverything || this.links.size > 0) return;
+		await this.indexDocuments();
+	}
+
+	/** Read one `.reader` and note what it points at. Anything else is ignored. */
+	private async rememberDocument(path: string): Promise<void> {
+		if (!path.endsWith(".reader") || !this.settings.deleteEverything) return;
+
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) return;
+
+		try {
+			const { parseDocument } = await import("./reader/document");
+			const { document } = parseDocument(await this.app.vault.read(file));
+			this.links.remember(path, document);
+		} catch {
+			// An unreadable sidecar simply is not indexed; it must not stop the others.
+		}
+	}
+
+	/**
+	 * Index every document, a few at a time.
+	 *
+	 * A Readwise import leaves ~2,000 of these. Reading them in one pass is the thing that made
+	 * the shelf unusable, so this yields between chunks and the window stays answerable while
+	 * it runs.
+	 */
+	private async indexDocuments(): Promise<void> {
+		const files = this.app.vault.getFiles().filter((file) => file.extension === "reader");
+
+		for (let i = 0; i < files.length; i++) {
+			await this.rememberDocument(files[i].path);
+			if (i % 25 === 24) await new Promise((resolve) => window.setTimeout(resolve, 0));
+		}
+
+		this.log.info(`indexed ${this.links.size} documents for cascading deletes`);
+	}
+
+	/**
+	 * A document was deleted; take its note and its file with it.
+	 *
+	 * Only ever trashes, and only ever things inside the vault — a source somewhere else was
+	 * never copied in and is not this plugin's to remove. A deletion arriving from Obsidian
+	 * Sync reaches here too, which is the behaviour the setting warns about.
+	 */
+	private async cascadeDelete(path: string): Promise<void> {
+		if (!path.endsWith(".reader") || !this.settings.deleteEverything) return;
+
+		const { cascadeTargets } = await import("./library/links");
+		const targets = cascadeTargets(this.links.forget(path));
+		if (targets.length === 0) return;
+
+		const trashed: string[] = [];
+		for (const target of targets) {
+			const file = this.app.vault.getAbstractFileByPath(target);
+			// Already gone — the library's own delete trashes all three itself.
+			if (!(file instanceof TFile)) continue;
+
+			try {
+				await this.app.fileManager.trashFile(file);
+				trashed.push(target);
+			} catch (error) {
+				this.log.error(`could not trash ${target}`, error);
+			}
+		}
+
+		if (trashed.length > 0) {
+			new Notice(`Reader: also trashed ${trashed.length === 1 ? "1 file" : `${trashed.length} files`}.`);
+		}
+	}
+
+	/** The full delete, as a command, so it can be given a hotkey. */
+	private async deleteEverythingFor(file: TFile): Promise<void> {
+		const [{ ConfirmModal }, { describeRemoval, writtenCharsIn }, { parseDocument }] = await Promise.all([
+			import("./library/confirm"),
+			import("./library/remove"),
+			import("./reader/document"),
+		]);
+
+		let notePath: string | undefined;
+		let documentPath: string | undefined;
+		let clips = 0;
+
+		try {
+			const { document } = parseDocument(await this.app.vault.read(file));
+			notePath = document.notePath;
+			documentPath = document.source.path;
+			clips = Object.keys(document.clips ?? {}).length;
+		} catch {
+			// Unreadable: the `.reader` can still go, there is simply nothing to follow.
+		}
+
+		const note = notePath ? this.app.vault.getAbstractFileByPath(notePath) : null;
+		const written = note instanceof TFile ? writtenCharsIn(await this.app.vault.read(note)) : 0;
+
+		const plan = {
+			readerPath: file.path,
+			notePath: note instanceof TFile ? notePath : undefined,
+			documentPath:
+				documentPath && this.app.vault.getAbstractFileByPath(documentPath) instanceof TFile
+					? documentPath
+					: undefined,
+			writtenChars: written,
+			clips,
+		};
+
+		new ConfirmModal(this.app, {
+			title: `Delete “${file.basename}”?`,
+			body: `${describeRemoval(plan, true)} Everything goes to trash, so this can be undone.`,
+			confirmText: "Delete",
+			onConfirm: () => {
+				void (async () => {
+					for (const path of [plan.documentPath, plan.notePath, plan.readerPath]) {
+						if (!path) continue;
+						const target = this.app.vault.getAbstractFileByPath(path);
+						if (!(target instanceof TFile)) continue;
+						await this.app.fileManager.trashFile(target).catch(() => {});
+					}
+					new Notice(`Reader: deleted ${file.basename}.`);
+				})();
+			},
+		}).open();
+	}
+
+	/**
 	 * Files dragged onto the shelf become documents.
 	 *
 	 * Written into the vault first, because a document has to be a file Reader can point at —
@@ -810,6 +986,11 @@ export default class ReaderPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		this.log.setLevel(this.settings.logLevel);
 		await this.saveData(this.settings);
+
+		// Switching cascading deletes on has to start working now, not after a restart. The
+		// index is what the feature needs and it is only built when something wants it.
+		if (this.settings.deleteEverything) void this.indexIfWanted();
+		else this.links.clear();
 	}
 
 	/** Fired when data.json is rewritten underneath us — typically Obsidian Sync. */

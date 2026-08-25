@@ -84,6 +84,7 @@ export class ReaderSettingTab extends PluginSettingTab {
 			this.library(),
 			this.colours(),
 			this.importing(),
+			this.removing(),
 			this.features(),
 			this.advanced(),
 		];
@@ -329,6 +330,25 @@ export class ReaderSettingTab extends PluginSettingTab {
 						step: 0.05,
 						displayFormat: (value) => value.toFixed(2),
 					},
+				},
+			],
+		};
+	}
+
+	private removing(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Removing documents",
+			items: [
+				{
+					name: "Deleting a document takes its file and note with it",
+					desc:
+						"Off, deleting a document removes it from the library and leaves the file and your " +
+						"note where they are. On, all three go — which is what you want if the originals are " +
+						"filling your vault. Everything is trashed rather than erased, so either way it can " +
+						"be undone. A deletion arriving from Obsidian Sync counts as a deletion.",
+					aliases: ["delete", "trash", "remove", "storage", "space", "cascade"],
+					control: { type: "toggle", key: "deleteEverything" },
 				},
 			],
 		};

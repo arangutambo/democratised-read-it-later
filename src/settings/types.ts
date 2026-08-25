@@ -142,6 +142,19 @@ export interface ReaderSettings {
 	highlightColours: HighlightColour[];
 	/** Imports below this confidence are marked `needs-review` rather than trusted. 0–1. */
 	importConfidenceThreshold: number;
+	/**
+	 * Whether removing a document from the library also trashes its file and its note.
+	 *
+	 * Off by default, because the three files behind one row are not equally replaceable and
+	 * the plain meaning of deleting a `.reader` is "take this off the shelf" — the PDF may be
+	 * your only copy and the note may hold a term of your writing. On, it means what someone
+	 * who is watching their disk fill up expects: the row goes, and so does everything behind
+	 * it. Everything is trashed rather than erased either way.
+	 *
+	 * Worth knowing before switching it on: a deletion arriving from Obsidian Sync is a
+	 * deletion, so a document removed on another device takes its file and note here too.
+	 */
+	deleteEverything: boolean;
 	logLevel: LogLevel;
 }
 
@@ -167,6 +180,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 	progressFile: "Sources/.reader-progress.json",
 	highlightColours: [],
 	importConfidenceThreshold: 0.6,
+	deleteEverything: false,
 	logLevel: "warn",
 };
 

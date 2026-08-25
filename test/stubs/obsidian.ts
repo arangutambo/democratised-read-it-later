@@ -14,13 +14,24 @@ export class App {
 		getLeaf: (): { openFile: (file: unknown) => Promise<void> } => ({
 			openFile: async () => {},
 		}),
+		/**
+		 * Runs the callback at once.
+		 *
+		 * The real one defers until the workspace is built. A test has no workspace to wait
+		 * for, and deferring for ever would silently skip whatever was registered through it.
+		 */
+		onLayoutReady: (callback: () => void): void => callback(),
 		/** Returns an EventRef in the real API; the plugin only ever passes it to registerEvent. */
 		on: (name: string, callback: unknown): unknown => ({ name, callback }),
 		off: (): void => {},
 	};
 
 	vault = {
+		getFiles: (): unknown[] => [],
 		getMarkdownFiles: (): unknown[] => [],
+		/** Same shape as the workspace's: an opaque ref the plugin only hands to registerEvent. */
+		on: (name: string, callback: unknown): unknown => ({ name, callback }),
+		off: (): void => {},
 		getFileByPath: (): unknown => null,
 		getAbstractFileByPath: (): unknown => null,
 		create: async (): Promise<void> => {},
