@@ -3,7 +3,7 @@ import { MarkdownView, Notice, Platform, Plugin, TFile } from "obsidian";
 import { Disposables } from "./core/disposables";
 import { Logger } from "./core/log";
 import { findExcalidraw } from "./excalidraw/handoff";
-import { LIBRARY_VIEW_TYPE, LibraryView } from "./library/view";
+import { LIBRARY_VIEW_TYPE, LibraryView, type AddedToLibrary } from "./library/view";
 import { isReadable, kindOf } from "./reader/open";
 import { READER_VIEW_TYPE, ReaderView } from "./reader/view";
 import { readerSkin } from "./render/reader-skin";
@@ -187,6 +187,7 @@ export default class ReaderPlugin extends Plugin {
 				new LibraryView(leaf, {
 					pageCounts: this.pageCounts,
 					onOpen: (path) => void this.openReaderFile(path),
+					onAdd: (files) => this.addDroppedFiles(files),
 				}),
 		);
 
@@ -472,6 +473,65 @@ export default class ReaderPlugin extends Plugin {
 			// A missing or unreadable sidecar costs labels, never the handoff itself.
 		}
 		return out;
+	}
+
+	/**
+	 * Files dragged onto the shelf become documents.
+	 *
+	 * Written into the vault first, because a document has to be a file Reader can point at —
+	 * a dropped file lives on the desktop, and a shelf entry that breaks when you tidy your
+	 * Downloads folder is not a library. They are not opened: dropping six things is filing
+	 * them, not choosing one, and the shelf shows them at the top of unread instead.
+	 */
+	private async addDroppedFiles(files: readonly File[]): Promise<AddedToLibrary> {
+		const { kindForDropped, freePathFor } = await import("./library/drop");
+		const { ensurePair } = await import("./reader/open");
+
+		const added: string[] = [];
+		const rejected: string[] = [];
+
+		for (const file of files) {
+			const kind = kindForDropped(file.name);
+			if (!kind) {
+				rejected.push(file.name);
+				continue;
+			}
+
+			try {
+				await this.ensureFolder(this.settings.decksFolder);
+
+				const path = freePathFor(
+					this.settings.decksFolder,
+					file.name,
+					(candidate) => this.app.vault.getAbstractFileByPath(candidate) !== null,
+				);
+
+				await this.app.vault.createBinary(path, await file.arrayBuffer());
+
+				// The name it actually landed under, which is not the dropped one when a
+				// document of that name was already here.
+				const basename = (path.split("/").pop() ?? path).replace(/\.[^.]+$/, "");
+				const pair = await ensurePair(this.app, { path, basename, kind }, this.settings.sourcesFolder);
+				added.push(pair.readerPath);
+			} catch (error) {
+				this.log.error(`could not add ${file.name}`, error);
+				rejected.push(file.name);
+			}
+		}
+
+		return { added, rejected };
+	}
+
+	/** Create a folder and its parents, quietly, if they are not already there. */
+	private async ensureFolder(folder: string): Promise<void> {
+		if (folder === "") return;
+
+		const parts = folder.split("/");
+		for (let i = 1; i <= parts.length; i++) {
+			const partial = parts.slice(0, i).join("/");
+			if (this.app.vault.getAbstractFileByPath(partial)) continue;
+			await this.app.vault.createFolder(partial).catch(() => {});
+		}
 	}
 
 	/** Create the `.reader` + `.md` pair for a PDF and open it. */

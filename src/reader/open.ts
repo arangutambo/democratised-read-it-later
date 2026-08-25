@@ -127,9 +127,14 @@ export function isReadable(file: TFile): boolean {
 	return kindOf(file) !== undefined;
 }
 
-/** Which reader a file needs, or undefined when Reader cannot open it. */
-export function kindOf(file: TFile): SourceKind | undefined {
-	switch (file.extension.toLowerCase()) {
+/**
+ * Which reader an extension needs, or undefined when Reader cannot open it.
+ *
+ * Split from `kindOf` so a file that is not in the vault yet — one being dragged onto the
+ * shelf, which is a name and some bytes — can be judged by the same list.
+ */
+export function kindForExtension(extension: string): SourceKind | undefined {
+	switch (extension.toLowerCase()) {
 		case "pdf":
 			return "pdf";
 		case "epub":
@@ -140,4 +145,9 @@ export function kindOf(file: TFile): SourceKind | undefined {
 		default:
 			return undefined;
 	}
+}
+
+/** Which reader a file needs, or undefined when Reader cannot open it. */
+export function kindOf(file: TFile): SourceKind | undefined {
+	return kindForExtension(file.extension);
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.0
+
+**Drag files onto the library to add them.** Drop a PDF, EPUB or saved web page
+onto the shelf and it becomes a document: the file is copied into your vault, a
+`.reader` and its note are created, and the shelf jumps to unread with the new
+arrival at the top. Nothing opens — dropping six things is filing them, not
+choosing one.
+
+The file is copied in rather than linked, because a shelf entry that breaks when
+you tidy your Downloads folder is not a library.
+
+Dropping a file whose name is already taken makes a second document rather than
+replacing the first, which may already carry highlights. Anything Reader cannot
+open is named in the status line instead of being silently ignored.
+
 ## 0.10.0
 
 Halves the community review's remaining findings, and settles the rest with

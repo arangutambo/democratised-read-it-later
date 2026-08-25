@@ -118,6 +118,12 @@ sits above it, under whichever parent actually precedes it.
 
 ## The library
 
+**Drag a file onto the shelf to add it.** A PDF, EPUB or saved `.html` dropped
+onto the library pane is copied into your vault, given a document and a note,
+and lands at the top of unread. Dropping a name that is already taken makes a
+second document rather than overwriting the first.
+
+
 The **Reader library** (command palette → *Open the Reader library*, or *…in a tab*
 for the full-width version) is a shelf rather than a file list: it shows how far
 through each document you are and how much has come out of it.

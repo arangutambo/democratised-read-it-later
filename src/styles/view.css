@@ -852,6 +852,24 @@
 	opacity: 0.6;
 }
 
+/*
+ * A file is being dragged over the shelf.
+ *
+ * Inset rather than a border: a border on the pane would reflow every row underneath it the
+ * moment a drag begins, and things moving as you reach for them is how you drop on the wrong
+ * one. `outline` draws over the layout instead of in it, and `pointer-events: none` on the
+ * children stops a row swallowing the drop as a click.
+ */
+.reader-library.is-drop-target {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -6px;
+	background-color: var(--background-modifier-hover);
+}
+
+.reader-library.is-drop-target > * {
+	pointer-events: none;
+}
+
 /* A transcription, before it becomes a note. */
 .reader-transcription-modal { width: min(680px, 90vw); }
 

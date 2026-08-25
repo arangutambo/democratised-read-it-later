@@ -48,10 +48,24 @@ function asButton(el: HTMLElement, label: string, activate: () => void): void {
 	});
 }
 
+export interface AddedToLibrary {
+	/** `.reader` paths created, in the order they were dropped. */
+	added: string[];
+	/** Names Reader cannot open, so the shelf can say which. */
+	rejected: string[];
+}
+
 export interface LibraryDeps {
 	/** Page counts, once a document has been opened. Filled by the reader view. */
 	pageCounts: Map<string, number>;
 	onOpen: (path: string) => void;
+	/**
+	 * Bring dropped files into the vault and give each one a document.
+	 *
+	 * The view knows a drop happened; it does not know where documents live or how a pair is
+	 * made, and it should not — those are the plugin's, and they move with settings.
+	 */
+	onAdd?: (files: readonly File[]) => Promise<AddedToLibrary>;
 }
 
 /** Progress and state, recomputed when a page count finally arrives. */
@@ -99,6 +113,14 @@ export class LibraryView extends ItemView {
 	/** What the status line last said, so an unchanged shelf is not re-announced. */
 	private announced = "";
 	private searchEl!: HTMLInputElement;
+	private sortEl!: HTMLSelectElement;
+	/**
+	 * Nesting depth of the current drag.
+	 *
+	 * `dragleave` fires when the pointer crosses into a *child*, so a single boolean turns the
+	 * highlight off while the file is still over the pane. Counting enter and leave does not.
+	 */
+	private dragDepth = 0;
 
 	constructor(leaf: WorkspaceLeaf, deps: LibraryDeps) {
 		super(leaf);
@@ -134,6 +156,7 @@ export class LibraryView extends ItemView {
 		});
 
 		const sortEl = header.createEl("select");
+		this.sortEl = sortEl;
 		sortEl.setAttribute("aria-label", "Sort the Reader library");
 		for (const [value, label] of [
 			["recent", "Recent"],
@@ -169,6 +192,8 @@ export class LibraryView extends ItemView {
 		this.statusEl.setAttribute("aria-atomic", "true");
 
 		this.listEl = root.createDiv({ cls: "reader-library-list" });
+
+		this.acceptDrops(root);
 
 		// Draw more only as they are needed; 2,088 rows at once misses Doherty by seconds.
 		this.registerDomEvent(root, "scroll", () => {
@@ -301,6 +326,96 @@ export class LibraryView extends ItemView {
 	 * Guarded on the last message because `render` runs on every scroll page and every file
 	 * change, and repeating an unchanged sentence is how a status region becomes noise.
 	 */
+	/**
+	 * Dragging a file onto the shelf puts it on the shelf.
+	 *
+	 * The shortest path from "I have this PDF" to "I am reading it": before this, a file had to
+	 * already be in the vault and then be found and right-clicked. Only files from outside
+	 * Obsidian arrive with `dataTransfer.files`; a drag from the file explorer is already in the
+	 * vault and can be opened the way it always could.
+	 */
+	private acceptDrops(root: HTMLElement): void {
+		if (!this.deps.onAdd) return;
+
+		const carriesFiles = (event: DragEvent): boolean =>
+			Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+		this.registerDomEvent(root, "dragenter", (event) => {
+			if (!carriesFiles(event)) return;
+			event.preventDefault();
+			this.dragDepth++;
+			root.addClass("is-drop-target");
+		});
+
+		this.registerDomEvent(root, "dragover", (event) => {
+			if (!carriesFiles(event)) return;
+			// Without this the browser opens the file instead, navigating away from the vault.
+			event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+		});
+
+		this.registerDomEvent(root, "dragleave", (event) => {
+			if (!carriesFiles(event)) return;
+			this.dragDepth = Math.max(0, this.dragDepth - 1);
+			if (this.dragDepth === 0) root.removeClass("is-drop-target");
+		});
+
+		this.registerDomEvent(root, "drop", (event) => {
+			if (!carriesFiles(event)) return;
+			event.preventDefault();
+			this.dragDepth = 0;
+			root.removeClass("is-drop-target");
+
+			const files = Array.from(event.dataTransfer?.files ?? []);
+			if (files.length > 0) void this.receive(files);
+		});
+	}
+
+	/**
+	 * Take what was dropped, then show it.
+	 *
+	 * Landing a document in the shelf and leaving the view where it was means dropping five
+	 * files and seeing nothing happen. So the shelf moves to where they are: unread, newest
+	 * first, scrolled to the top — which is where a thing you just added belongs.
+	 */
+	private async receive(files: readonly File[]): Promise<void> {
+		if (!this.deps.onAdd) return;
+
+		this.say(files.length === 1 ? "Adding 1 file…" : `Adding ${files.length} files…`);
+
+		let result: AddedToLibrary;
+		try {
+			result = await this.deps.onAdd(files);
+		} catch {
+			this.say("Those files could not be added.");
+			return;
+		}
+
+		if (result.added.length > 0) {
+			this.query = "";
+			this.searchEl.value = "";
+			this.state = "unread";
+			this.sort = "recent";
+			this.sortEl.value = "recent";
+			this.drawn = PAGE;
+			this.contentEl.scrollTop = 0;
+			this.render();
+		}
+
+		const added = result.added.length;
+		const parts: string[] = [];
+		if (added > 0) parts.push(`Added ${added} document${added === 1 ? "" : "s"} to unread.`);
+		if (result.rejected.length > 0) {
+			parts.push(`Reader cannot open ${result.rejected.join(", ")}.`);
+		}
+		if (parts.length === 0) parts.push("Nothing was added.");
+
+		// Said rather than left to the row count, because the shelf may have been scrolled
+		// somewhere else entirely when the drop landed.
+		this.announced = "";
+		this.say(parts.join(" "));
+	}
+
 	private say(message: string): void {
 		if (!this.statusEl || message === this.announced) return;
 		this.announced = message;
