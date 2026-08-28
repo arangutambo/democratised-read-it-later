@@ -12,12 +12,15 @@ import { Modal, Notice, Setting, TFile, type App } from "obsidian";
 import { sanitiseArticle } from "./sanitise";
 import { parseArticle } from "./article";
 import { fetchPage, fileNameFor, SaveUrlError, titleOf } from "./fetch";
+import { canRenderPages, renderPage } from "./render";
 
 export interface SaveUrlOptions {
 	/** Where the saved page is written. */
 	documentsFolder: string;
 	/** Opens the freshly-saved document in Reader, pairing it with the URL it came from. */
 	onSaved: (path: string, url?: string) => void;
+	/** Progress, because rendering a page takes seconds and silence reads as a hang. */
+	onProgress?: (message: string) => void;
 }
 
 async function ensureFolder(app: App, folder: string): Promise<void> {
@@ -51,23 +54,50 @@ function freePath(app: App, folder: string, base: string): string {
  * dangerous shapes never reach disk.
  */
 export async function saveUrl(app: App, url: string, options: SaveUrlOptions): Promise<string> {
+	options.onProgress?.("Fetching…");
 	const { html, url: finalUrl } = await fetchPage(url);
 
 	const parse = (source: string): Document => new DOMParser().parseFromString(source, "text/html");
-	const raw = parse(html);
-	const title = titleOf(raw, finalUrl);
 
-	// Re-parsed through the article pipeline so what lands on disk is the same shape the reader
-	// renders — and so an unreadable page fails here rather than after it is saved.
-	const article = parseArticle(html, parse);
-	const holder = document.implementation.createHTMLDocument("");
-	const cleaned = article.sections
-		.map((section) => sanitiseArticle(section.body, holder).innerHTML)
-		.join("\n");
+	/** The page as the reader would render it, so an unreadable one fails before it is saved. */
+	const readableFrom = (source: string): string => {
+		const article = parseArticle(source, parse);
+		const holder = document.implementation.createHTMLDocument("");
+		return article.sections
+			.map((section) => sanitiseArticle(section.body, holder).innerHTML)
+			.join("\n");
+	};
 
-	if (cleaned.replace(/<[^>]+>/g, "").trim() === "") {
-		throw new SaveUrlError("Nothing readable on that page — it may need JavaScript or a login.");
+	let source = html;
+	let cleaned = readableFrom(source);
+
+	/*
+	 * Nothing in it, so try again with a browser.
+	 *
+	 * An app shell is 800 bytes of `<div id="root">` and two script tags; the article exists
+	 * only once those scripts have run. The plain fetch is still tried first because it is
+	 * instant and works for most of the web — this is the fallback, not the default.
+	 */
+	if (isEmpty(cleaned) && canRenderPages()) {
+		options.onProgress?.("That page needs JavaScript — rendering it…");
+		try {
+			source = await renderPage(finalUrl, { onProgress: options.onProgress });
+			cleaned = readableFrom(source);
+		} catch (error) {
+			// Falls through to the message below, which is the honest one either way.
+			console.error("[reader] could not render the page", error);
+		}
 	}
+
+	if (isEmpty(cleaned)) {
+		throw new SaveUrlError(
+			canRenderPages()
+				? "Nothing readable on that page, even after rendering it — it may need a login."
+				: "Nothing readable on that page — it may need JavaScript, which needs the desktop app.",
+		);
+	}
+
+	const title = titleOf(parse(source), finalUrl);
 
 	await ensureFolder(app, options.documentsFolder);
 	const path = freePath(app, options.documentsFolder, fileNameFor(title, finalUrl));
@@ -81,6 +111,11 @@ export async function saveUrl(app: App, url: string, options: SaveUrlOptions): P
 	await app.vault.create(path, `<!-- reader-source: ${finalUrl} -->\n${cleaned}\n`);
 
 	return path;
+}
+
+/** Whether the article pipeline found any actual words. */
+function isEmpty(cleaned: string): boolean {
+	return cleaned.replace(/<[^>]+>/g, "").trim() === "";
 }
 
 /** The paste-a-URL dialog. */
@@ -119,7 +154,10 @@ export class SaveUrlModal extends Modal {
 			status.setText("Fetching…");
 
 			try {
-				const path = await saveUrl(this.app, this.url, this.options);
+				const path = await saveUrl(this.app, this.url, {
+					...this.options,
+					onProgress: (message) => status.setText(message),
+				});
 				this.close();
 				new Notice(`Reader: saved ${path}`);
 				this.options.onSaved(path, this.url.trim());

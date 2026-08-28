@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.13.0
+
+**Saving a link now works on pages built with JavaScript.** Paste a link to a
+site that renders itself in the browser — most personal sites, docs and app-shell
+pages — and it saves properly instead of refusing with "nothing readable on that
+page".
+
+Those pages are about 800 bytes of `<div id="root">` and a script tag when you
+ask for them over HTTP; the article only exists once the scripts have run. So
+when the plain fetch comes back with nothing, the page is loaded in a real
+browser view, given a moment to build itself, and read from there. Measured on
+one such site: 33 readable characters before, 5,700 after.
+
+The plain fetch is still tried first, because it is instant and works for most
+of the web. Rendering is the fallback, it is desktop-only — there is no browser
+view on mobile — and the dialog now says which stage it is at, because rendering
+takes a few seconds and silence reads as a hang.
+
+**Commands renamed so they can be found.** *"Save a page to Reader"* is now
+*"Save a web page from a link"*, and the YouTube one matches. Searching the
+command palette for "link" found nothing before, which is a poor answer when the
+feature exists. The library commands drop the stale "Reader" too. Command ids
+are unchanged, so any hotkey you have already set still works.
+
 ## 0.12.0
 
 **Deleting a document can now take its file and note with it.** Off by default;

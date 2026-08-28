@@ -97,13 +97,13 @@ export default class ReaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "save-url-to-reader",
-			name: "Save a page to Reader",
+			name: "Save a web page from a link",
 			callback: () => void this.saveUrl(),
 		});
 
 		this.addCommand({
 			id: "save-youtube-video",
-			name: "Save a YouTube video to Reader",
+			name: "Save a YouTube video from a link",
 			checkCallback: (checking) => {
 				// The transcript is read out of a real YouTube page in a webview, and there is
 				// no webview on mobile.
@@ -215,7 +215,7 @@ export default class ReaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "search-reader-library",
-			name: "Search the Reader library",
+			name: "Search the library",
 			callback: () => void this.openSwitcher(),
 		});
 
@@ -233,13 +233,13 @@ export default class ReaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-reader-library-tab",
-			name: "Open the Reader library in a tab",
+			name: "Open the library in a tab",
 			callback: () => void this.revealLibrary(true),
 		});
 
 		this.addCommand({
 			id: "open-reader-library",
-			name: "Open the Reader library",
+			name: "Open the library",
 			callback: () => void this.revealLibrary(),
 		});
 
@@ -259,7 +259,7 @@ export default class ReaderPlugin extends Plugin {
 
 		this.addCommand({
 			id: "open-in-reader",
-			name: "Open this PDF in Reader",
+			name: "Open this PDF for reading",
 			checkCallback: (checking) => {
 				const file = this.app.workspace.getActiveFile();
 				if (!file || !isReadable(file)) return false;

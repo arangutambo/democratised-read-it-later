@@ -156,7 +156,7 @@ publisher's own image file at full resolution rather than a screenshot of it.
 
 ### Web articles
 
-**Save a page by pasting its URL.** *Save a page to Reader* takes a link and
+**Save a page by pasting its link.** *Save a web page from a link* takes a link and
 writes the article into your vault as a local document — readable offline,
 greppable, clipped with the same keys, and unaffected by the site going away
 later. It is sanitised before it is written rather than when it is read, so the
